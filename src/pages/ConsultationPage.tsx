@@ -63,6 +63,7 @@ export default function ConsultationPage() {
   }, [appointmentId, getMedicalRecordByAppointmentId, navigate])
 
   const [showCopyModal, setShowCopyModal] = useState(false)
+  const [hasDismissedCopyModal, setHasDismissedCopyModal] = useState(false)
   const [copyFromRecord, setCopyFromRecord] = useState<MedicalRecord | null>(null)
   const [copyOptions, setCopyOptions] = useState({
     chiefComplaint: true,
@@ -98,6 +99,7 @@ export default function ConsultationPage() {
   const [addQuantity, setAddQuantity] = useState('')
 
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [prescriptionWarning, setPrescriptionWarning] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
   if (!appt || !pet || !owner || !doctor) {
@@ -175,6 +177,10 @@ export default function ConsultationPage() {
       setTimeout(() => setToast(null), 3000)
       return
     }
+    if (drug.status === 'near_expiry') {
+      setPrescriptionWarning(`⚠️ 药品 ${drug.name} 即将过期（${drug.expiryDate}），已添加到处方，请确认`)
+      setTimeout(() => setPrescriptionWarning(null), 4000)
+    }
 
     setPrescriptions([
       ...prescriptions,
@@ -233,6 +239,7 @@ export default function ConsultationPage() {
     if (copyOptions.examResults) {
       setExamResults(JSON.parse(JSON.stringify(copyFromRecord.examResults)))
     }
+    setHasDismissedCopyModal(true)
     setShowCopyModal(false)
     setCopyFromRecord(null)
     setToast({ type: 'success', message: '已带入历史信息' })
@@ -240,14 +247,21 @@ export default function ConsultationPage() {
   }
 
   useEffect(() => {
-    if (appt?.type === '复诊' && existingRecords.length > 0) {
-      const sorted = [...existingRecords].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    if (
+      appt?.type === '复诊' &&
+      (existingRecords || []).length > 0 &&
+      !hasDismissedCopyModal &&
+      !showCopyModal
+    ) {
+      const sorted = [...(existingRecords || [])].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
       const latest = sorted[0]
       if (latest) {
         openCopyModal(latest)
       }
     }
-  }, [appt, existingRecords.length, openCopyModal])
+  }, [appt?.type, (existingRecords || []).length])
 
   const handleSave = (complete: boolean) => {
     setSaveError(null)
@@ -306,8 +320,8 @@ export default function ConsultationPage() {
     existingRecords.length > 0 ? existingRecords[existingRecords.length - 1] : null
 
   const historyRecords = [...existingRecords]
+    .filter((r) => r.appointmentId !== appointmentId)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(1)
 
   return (
     <div className="page-container max-w-7xl mx-auto">
@@ -326,7 +340,7 @@ export default function ConsultationPage() {
               历史病历参考
             </h2>
             {historyRecords.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-6">暂无历史病历</p>
+              <p className="text-sm text-slate-400 text-center py-6">暂无历史病历可参考</p>
             ) : (
               <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto pr-1">
                 {historyRecords.map((record) => (
@@ -455,6 +469,12 @@ export default function ConsultationPage() {
             <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
               <XCircle className="w-5 h-5" />
               {saveError}
+            </div>
+          )}
+          {prescriptionWarning && (
+            <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              {prescriptionWarning}
             </div>
           )}
           {saveSuccess && (
@@ -819,6 +839,7 @@ export default function ConsultationPage() {
               <button
                 onClick={() => {
                   setShowCopyModal(false)
+                  setHasDismissedCopyModal(true)
                   setCopyFromRecord(null)
                 }}
                 className="btn-secondary"

@@ -15,16 +15,21 @@ import { useAppStore } from '@/stores/useAppStore'
 
 function StartDiagnosisButton({ apptId }: { apptId: string }) {
   const navigate = useNavigate()
-  const { getAppointmentById, getMedicalRecordByAppointmentId } = useAppStore()
+  const { getAppointmentById, getMedicalRecordByAppointmentId, appointments } = useAppStore()
   const appt = getAppointmentById(apptId)
   const existingRecord = getMedicalRecordByAppointmentId(apptId)
+  const apptWithMedicalRecordId = appointments.find(a => a.id === apptId)?.medicalRecordId
+
+  const finalRecord = existingRecord ?? (apptWithMedicalRecordId
+    ? useAppStore.getState().medicalRecords.find(r => r.id === apptWithMedicalRecordId)
+    : undefined)
 
   if (!appt) return null
 
-  if (existingRecord) {
+  if (finalRecord) {
     return (
       <Link
-        to={`/diagnosis/medical/${existingRecord.id}`}
+        to={`/diagnosis/medical/${finalRecord.id}`}
         className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
       >
         查看病历
@@ -32,12 +37,23 @@ function StartDiagnosisButton({ apptId }: { apptId: string }) {
     )
   }
 
+  if (appt.status === 'scheduled' || appt.status === 'in_progress') {
+    return (
+      <button
+        onClick={() => navigate(`/diagnosis/consultation/${apptId}`)}
+        className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
+      >
+        {appt.status === 'scheduled' ? '开始诊疗' : '继续诊疗'}
+      </button>
+    )
+  }
+
   return (
     <button
       onClick={() => navigate(`/diagnosis/consultation/${apptId}`)}
-      className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
+      className="btn-secondary text-xs px-3 py-1.5 inline-block"
     >
-      {appt.status === 'scheduled' ? '开始诊疗' : '继续诊疗'}
+      再次接诊
     </button>
   )
 }
@@ -187,18 +203,7 @@ export default function Diagnosis() {
                         </span>
                       </td>
                       <td className="py-3 px-3">
-                        {appt.status === 'scheduled' || appt.status === 'in_progress' ? (
-                          <StartDiagnosisButton apptId={appt.id} />
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <Link
-                              to={`/diagnosis/consultation/${appt.id}`}
-                              className="btn-secondary text-xs px-3 py-1.5 inline-block"
-                            >
-                              再次接诊
-                            </Link>
-                          </div>
-                        )}
+                        <StartDiagnosisButton apptId={appt.id} />
                       </td>
                     </tr>
                   ))}

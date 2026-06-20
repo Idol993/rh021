@@ -21,12 +21,16 @@ export default function DiagnosisDetail() {
   const navigate = useNavigate()
   const { medicalRecords, pets, owners, doctors, getMedicalRecordsByPetId } = useAppStore()
 
-  const actualRecordId = recordId ?? id
-  let record = medicalRecords.find((r) => r.id === actualRecordId)
-  if (!record) {
-    const byPet = getMedicalRecordsByPetId(actualRecordId ?? '')
-    if (byPet && byPet.length > 0) {
-      record = byPet[byPet.length - 1]
+  let record: typeof medicalRecords[number] | undefined
+  if (recordId) {
+    record = medicalRecords.find((r) => r.id === recordId)
+  } else if (id) {
+    record = medicalRecords.find((r) => r.id === id)
+    if (!record) {
+      const byPet = getMedicalRecordsByPetId(id)
+      if (byPet && byPet.length > 0) {
+        record = byPet[byPet.length - 1]
+      }
     }
   }
   if (!record) {

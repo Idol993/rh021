@@ -145,11 +145,28 @@ export default function Pharmacy() {
       setInboundResult({ type: 'error', msg: '请选择入库药品' })
       return
     }
-    if (!inboundQty) {
+    if (!inboundQty || inboundQty.trim() === '') {
       setInboundResult({ type: 'error', msg: '请输入入库数量' })
       return
     }
-    const qty = parseInt(inboundQty)
+    const qtyNum = Number(inboundQty)
+    if (!Number.isFinite(qtyNum)) {
+      setInboundResult({ type: 'error', msg: '入库数量格式错误' })
+      return
+    }
+    if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
+      setInboundResult({ type: 'error', msg: '入库数量必须是正整数，不能是小数、0或负数' })
+      return
+    }
+    if (!inboundExpDate || inboundExpDate.trim() === '') {
+      setInboundResult({ type: 'error', msg: '请填写有效期' })
+      return
+    }
+    const today = new Date('2026-06-20')
+    if (new Date(inboundExpDate) <= today) {
+      setInboundResult({ type: 'error', msg: '药品已过期（有效期需晚于今日 2026-06-20），不允许入库' })
+      return
+    }
     const drug = drugs.find((d) => d.id === inboundDrug)
     if (!drug) {
       setInboundResult({ type: 'error', msg: '药品不存在' })
@@ -157,7 +174,7 @@ export default function Pharmacy() {
     }
     const result = doInbound(
       inboundDrug,
-      qty,
+      qtyNum,
       inboundBatch.trim() || `AUTO-${Date.now()}`,
       inboundExpDate.trim() || undefined,
       inboundSupplier.trim() || undefined
@@ -174,7 +191,7 @@ export default function Pharmacy() {
       userName: currentUser.name,
       action: '入库',
       module: '药房管理',
-      detail: `药品 ${drug.name} 入库 ${qty} 单位，批号 ${
+      detail: `药品 ${drug.name} 入库 ${qtyNum} 单位，批号 ${
         (inboundBatch.trim() || result.data?.batchNo) ?? 'AUTO'
       }`,
       timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
@@ -182,7 +199,7 @@ export default function Pharmacy() {
     })
     setInboundResult({
       type: 'success',
-      msg: `入库成功！${drug.name} × ${qty}，当前库存 ${
+      msg: `入库成功！${drug.name} × ${qtyNum}，当前库存 ${
         result.data?.stock ?? '已更新'
       }`,
     })
