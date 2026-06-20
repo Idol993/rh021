@@ -17,11 +17,18 @@ import {
 import { useAppStore } from '@/stores/useAppStore'
 
 export default function DiagnosisDetail() {
-  const { id } = useParams()
+  const { id, recordId } = useParams()
   const navigate = useNavigate()
-  const { medicalRecords, pets, owners, doctors } = useAppStore()
+  const { medicalRecords, pets, owners, doctors, getMedicalRecordsByPetId } = useAppStore()
 
-  const record = medicalRecords.find((r) => r.id === id)
+  const actualRecordId = recordId ?? id
+  let record = medicalRecords.find((r) => r.id === actualRecordId)
+  if (!record) {
+    const byPet = getMedicalRecordsByPetId(actualRecordId ?? '')
+    if (byPet && byPet.length > 0) {
+      record = byPet[byPet.length - 1]
+    }
+  }
   if (!record) {
     return (
       <div className="page-container flex flex-col items-center justify-center min-h-[60vh]">

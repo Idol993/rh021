@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/stores/useAppStore'
 import {
   Users,
@@ -12,6 +13,15 @@ import {
   Package,
   Shield,
   Apple,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Smartphone,
+  MessageCircle,
+  MessageSquare,
+  ExternalLink,
+  Sparkles,
 } from 'lucide-react'
 import {
   PieChart,
@@ -24,24 +34,15 @@ import {
   YAxis,
   Tooltip,
 } from 'recharts'
+import type { Recommendation } from '@/types'
 
-function getRecommendationType(text: string) {
-  if (/疫苗|接种/.test(text)) return 'vaccine'
-  if (/驱虫/.test(text)) return 'deworming'
-  if (/过敏|恢复|护理/.test(text)) return 'rehab'
-  if (/套餐|升级|续费|绝育|体检/.test(text)) return 'package'
-  if (/保险/.test(text)) return 'insurance'
-  if (/营养|补充/.test(text)) return 'supplement'
-  return 'package'
-}
-
-const typeConfig: Record<string, { icon: typeof Syringe; label: string; color: string }> = {
-  vaccine: { icon: Syringe, label: '疫苗提醒', color: 'text-blue-500' },
-  deworming: { icon: Bug, label: '驱虫提醒', color: 'text-purple-500' },
-  rehab: { icon: Heart, label: '康复关怀', color: 'text-pink-500' },
-  package: { icon: Package, label: '套餐推荐', color: 'text-orange-500' },
-  insurance: { icon: Shield, label: '保险推荐', color: 'text-emerald-500' },
-  supplement: { icon: Apple, label: '营养补充', color: 'text-red-500' },
+const typeConfig: Record<Recommendation['type'], { icon: typeof Syringe; label: string; color: string; badgeClass: string }> = {
+  vaccine: { icon: Syringe, label: '疫苗提醒', color: 'text-blue-500', badgeClass: 'bg-blue-100 text-blue-700 border-blue-200' },
+  deworming: { icon: Bug, label: '驱虫提醒', color: 'text-purple-500', badgeClass: 'bg-purple-100 text-purple-700 border-purple-200' },
+  rehab: { icon: Heart, label: '康复关怀', color: 'text-pink-500', badgeClass: 'bg-pink-100 text-pink-700 border-pink-200' },
+  package: { icon: Package, label: '套餐推荐', color: 'text-orange-500', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200' },
+  insurance: { icon: Shield, label: '保险推荐', color: 'text-emerald-500', badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  supplement: { icon: Apple, label: '营养补充', color: 'text-red-500', badgeClass: 'bg-red-100 text-red-700 border-red-200' },
 }
 
 const levelColors: Record<string, string> = {
@@ -66,9 +67,27 @@ const levelBenefits: Record<string, { discount: string; benefits: string }> = {
 }
 
 export default function Membership() {
-  const { members, getOwnerById } = useAppStore()
+  const navigate = useNavigate()
+  const {
+    members,
+    getOwnerById,
+    sendRecommendation,
+    dismissRecommendation,
+    currentUser,
+    addOperationLog,
+  } = useAppStore()
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState('全部')
+
+  const [sendModalOpen, setSendModalOpen] = useState(false)
+  const [currentMemberId, setCurrentMemberId] = useState('')
+  const [currentRec, setCurrentRec] = useState<Recommendation | null>(null)
+  const [channels, setChannels] = useState<{ app: boolean; sms: boolean; wechat: boolean }>({
+    app: false,
+    sms: false,
+    wechat: false,
+  })
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
 
   const diamondCount = members.filter((m) => m.level === '钻石会员').length
   const goldCount = members.filter((m) => m.level === '金卡会员').length
@@ -98,22 +117,26 @@ export default function Membership() {
       amount: m.totalSpent,
     }))
 
-  const allRecommendations = members.flatMap((m) =>
-    m.recommendations.map((rec) => ({
-      memberId: m.id,
-      memberName: getOwnerById(m.ownerId)?.name ?? '',
-      text: rec,
-      type: getRecommendationType(rec),
-    }))
-  )
+  // 只取未发送/未处理的推荐（status=pending 或部分渠道未发送的sent）
+  const pendingRecommendations = useMemo(() => {
+    return members.flatMap((m) =>
+      m.recommendations
+        .filter((r) => r.status === 'pending')
+        .map((rec) => ({
+          memberId: m.id,
+          memberName: getOwnerById(m.ownerId)?.name ?? '',
+          level: m.level,
+          recommendation: rec,
+        }))
+    )
+  }, [members, getOwnerById])
 
-  const grouped = allRecommendations.reduce<Record<string, typeof allRecommendations>>(
-    (acc, item) => {
-      ;(acc[item.type] ??= []).push(item)
-      return acc
-    },
-    {}
-  )
+  const grouped = pendingRecommendations.reduce<
+    Record<string, typeof pendingRecommendations>
+  >((acc, item) => {
+    ;(acc[item.recommendation.type] ??= []).push(item)
+    return acc
+  }, {})
 
   const stats = [
     { label: '会员总数', value: members.length, icon: Users, color: 'text-teal-600 bg-teal-50' },
@@ -122,9 +145,116 @@ export default function Membership() {
     { label: '本月新增', value: newThisMonth, icon: UserPlus, color: 'text-green-600 bg-green-50' },
   ]
 
+  const statusBadge = (s: Recommendation['status']) => {
+    switch (s) {
+      case 'pending':
+        return (
+          <span className="status-badge bg-amber-100 text-amber-700 inline-flex items-center gap-1 text-[10px]">
+            <Clock className="w-3 h-3" />
+            待发送
+          </span>
+        )
+      case 'sent':
+        return (
+          <span className="status-badge bg-blue-100 text-blue-700 inline-flex items-center gap-1 text-[10px]">
+            <Send className="w-3 h-3" />
+            已发送
+          </span>
+        )
+      case 'converted':
+        return (
+          <span className="status-badge bg-green-100 text-green-700 inline-flex items-center gap-1 text-[10px]">
+            <CheckCircle2 className="w-3 h-3" />
+            已转化
+          </span>
+        )
+      default:
+        return null
+    }
+  }
+
+  const openSendModal = (
+    memberId: string,
+    rec: Recommendation
+  ) => {
+    setCurrentMemberId(memberId)
+    setCurrentRec(rec)
+    const sent = rec.sentChannels ?? []
+    setChannels({
+      app: sent.includes('app'),
+      sms: sent.includes('sms'),
+      wechat: sent.includes('wechat'),
+    })
+    setSendModalOpen(true)
+  }
+
+  const closeSendModal = () => {
+    setSendModalOpen(false)
+    setCurrentMemberId('')
+    setCurrentRec(null)
+  }
+
+  const confirmSend = () => {
+    if (!currentRec) return
+    const toSend: ('app' | 'sms' | 'wechat')[] = []
+    if (channels.app) toSend.push('app')
+    if (channels.sms) toSend.push('sms')
+    if (channels.wechat) toSend.push('wechat')
+    if (toSend.length === 0) {
+      setToast({ type: 'error', msg: '请至少选择一个发送渠道' })
+      setTimeout(() => setToast(null), 2500)
+      return
+    }
+    try {
+      sendRecommendation(currentMemberId, currentRec.id, toSend)
+      addOperationLog({
+        userId: currentUser.id,
+        userName: currentUser.name,
+        action: '发送',
+        module: '智能推荐',
+        detail: `发送推荐[${currentRec.title}]，渠道：${toSend.join('/')}`,
+        timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        ip: '192.168.1.100',
+      })
+      const chLabel = { app: 'APP', sms: '短信', wechat: '微信' }
+      setToast({
+        type: 'success',
+        msg: `推荐已通过 ${toSend.map((c) => chLabel[c]).join(' / ')} 发送`,
+      })
+      setTimeout(() => setToast(null), 2500)
+      closeSendModal()
+    } catch (e: any) {
+      setToast({ type: 'error', msg: '发送失败：' + (e?.message ?? '未知') })
+      setTimeout(() => setToast(null), 2500)
+    }
+  }
+
+  const handleDismiss = (memberId: string, rec: Recommendation) => {
+    dismissRecommendation(memberId, rec.id)
+    setToast({ type: 'success', msg: '已忽略此推荐' })
+    setTimeout(() => setToast(null), 2000)
+  }
+
   return (
     <div className="page-container">
       <h1 className="text-2xl font-bold mb-6">会员运营</h1>
+
+      {toast && (
+        <div
+          className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm flex items-center gap-2 ${
+            toast.type === 'success'
+              ? 'bg-green-50 border border-green-200 text-green-700'
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4" />
+          ) : (
+            <XCircle className="w-4 h-4" />
+          )}
+          {toast.msg}
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         {stats.map((s) => (
@@ -193,11 +323,21 @@ export default function Membership() {
                       </td>
                       <td className="px-4 py-3">{m.points.toLocaleString()}</td>
                       <td className="px-4 py-3">¥{m.balance.toLocaleString()}</td>
-                      <td className="px-4 py-3">¥{m.totalSpent.toLocaleString()}</td>
-                      <td className="px-4 py-3">{(m.discount * 100).toFixed(0)}%</td>
+                      <td className="px-4 py-3">
+                        ¥{m.totalSpent.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(m.discount * 100).toFixed(0)}%
+                      </td>
                       <td className="px-4 py-3">{m.expiryDate}</td>
                       <td className="px-4 py-3">
-                        <button className="btn-primary text-xs px-3 py-1">查看详情</button>
+                        <button
+                          onClick={() => navigate(`/membership/${m.id}`)}
+                          className="btn-primary text-xs px-3 py-1 inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          查看详情
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -207,57 +347,101 @@ export default function Membership() {
           </div>
 
           <div className="card">
-            <h2 className="text-lg font-semibold mb-4">智能推荐</h2>
-            <div className="space-y-6">
-              {Object.entries(grouped).map(([type, items]) => {
-                const config = typeConfig[type]
-                const Icon = config.icon
-                return (
-                  <div key={type}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Icon className={`w-5 h-5 ${config.color}`} />
-                      <span className="font-medium">{config.label}</span>
-                      <span className="text-xs text-slate-400">({items.length})</span>
-                    </div>
-                    <div className="space-y-3">
-                      {items.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="border border-slate-200 rounded-lg p-4"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <div className="font-medium text-sm">{item.text}</div>
-                              <div className="text-xs text-slate-500 mt-1">
-                                会员：{item.memberName}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-accent-500" />
+                智能推荐待发送
+              </h2>
+              <div className="text-xs text-slate-500">
+                共 {pendingRecommendations.length} 条待处理
+              </div>
+            </div>
+            {pendingRecommendations.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 text-sm">
+                🎉 所有推荐都已处理完毕
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(grouped).map(([type, items]) => {
+                  const config = typeConfig[type as Recommendation['type']]
+                  const Icon = config.icon
+                  return (
+                    <div key={type}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Icon className={`w-5 h-5 ${config.color}`} />
+                        <span className="font-medium">{config.label}</span>
+                        <span className="text-xs text-slate-400">
+                          ({items.length})
+                        </span>
+                      </div>
+                      <div className="space-y-3">
+                        {items.map((item, idx) => {
+                          const rec = item.recommendation
+                          return (
+                            <div
+                              key={idx}
+                              className={`border rounded-lg p-4 ${config.badgeClass} border-opacity-50 bg-white`}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    <span
+                                      className={`status-badge text-[10px] ${config.badgeClass}`}
+                                    >
+                                      {config.label}
+                                    </span>
+                                    {statusBadge(rec.status)}
+                                    {rec.petName && (
+                                      <span className="text-xs text-slate-500">
+                                        宠物：{rec.petName}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="font-medium text-sm text-slate-800">
+                                    {rec.title}
+                                  </div>
+                                  <div className="text-xs text-slate-600 mt-0.5">
+                                    {rec.description}
+                                  </div>
+                                  <div className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
+                                    会员：{item.memberName} ·{' '}
+                                    <span className="font-medium">
+                                      {item.level}
+                                    </span>{' '}
+                                    · 原因：{rec.reason}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    onClick={() => openSendModal(item.memberId, rec)}
+                                    className="btn-primary text-xs px-3 py-1 inline-flex items-center gap-1"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                    发送
+                                  </button>
+                                  <button
+                                    onClick={() => handleDismiss(item.memberId, rec)}
+                                    className="btn-secondary text-xs px-3 py-1"
+                                  >
+                                    忽略
+                                  </button>
+                                  <button
+                                    onClick={() => navigate(`/membership/${item.memberId}`)}
+                                    className="text-xs px-2 py-1 text-slate-500 hover:text-primary-600"
+                                  >
+                                    会员 →
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="flex items-center justify-between mt-3">
-                            <div className="flex items-center gap-4 text-xs">
-                              <label className="flex items-center gap-1">
-                                <input type="checkbox" className="rounded" /> APP
-                              </label>
-                              <label className="flex items-center gap-1">
-                                <input type="checkbox" className="rounded" /> 短信
-                              </label>
-                              <label className="flex items-center gap-1">
-                                <input type="checkbox" className="rounded" /> 微信
-                              </label>
-                            </div>
-                            <div className="flex gap-2">
-                              <button className="btn-primary text-xs px-3 py-1">发送</button>
-                              <button className="btn-secondary text-xs px-3 py-1">暂缓</button>
-                              <button className="btn-danger text-xs px-3 py-1">忽略</button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -302,7 +486,10 @@ export default function Membership() {
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value: number) => [`¥${value.toLocaleString()}`, '累计消费']}
+                  formatter={(value: number) => [
+                    `¥${value.toLocaleString()}`,
+                    '累计消费',
+                  ]}
                 />
                 <Bar dataKey="amount" fill="#0f766e" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -312,23 +499,138 @@ export default function Membership() {
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">会员权益说明</h2>
             <div className="space-y-3">
-              {['钻石会员', '金卡会员', '银卡会员', '普通会员'].map((level) => (
-                <div key={level} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50">
-                  <span className={`status-badge ${levelBadgeClass[level]}`}>{level}</span>
-                  <div className="text-sm">
-                    <span className="font-medium">{levelBenefits[level].discount}</span>
-                    {levelBenefits[level].benefits && (
-                      <span className="text-slate-500 ml-2">
-                        + {levelBenefits[level].benefits}
+              {['钻石会员', '金卡会员', '银卡会员', '普通会员'].map(
+                (level) => (
+                  <div
+                    key={level}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-slate-50"
+                  >
+                    <span className={`status-badge ${levelBadgeClass[level]}`}>
+                      {level}
+                    </span>
+                    <div className="text-sm">
+                      <span className="font-medium">
+                        {levelBenefits[level].discount}
                       </span>
-                    )}
+                      {levelBenefits[level].benefits && (
+                        <span className="text-slate-500 ml-2">
+                          + {levelBenefits[level].benefits}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {sendModalOpen && currentRec && (
+        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-primary-50 to-cyan-50">
+              <h3 className="font-bold text-slate-800 text-lg">发送推荐</h3>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {currentRec.title}
+              </p>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-slate-700 mb-4">选择推送渠道（可多选）：</p>
+              <div className="space-y-3">
+                {(
+                  [
+                    [
+                      'app',
+                      'APP消息推送',
+                      Smartphone,
+                      'APP 内通知会自动加入会员消息中心',
+                    ],
+                    [
+                      'sms',
+                      '短信通知',
+                      MessageCircle,
+                      '短信将发送至会员绑定手机号',
+                    ],
+                    [
+                      'wechat',
+                      '微信服务通知',
+                      MessageSquare,
+                      '通过微信公众号服务通知推送',
+                    ],
+                  ] as [
+                    'app' | 'sms' | 'wechat',
+                    string,
+                    typeof Smartphone,
+                    string
+                  ][]
+                ).map(([k, label, Ico, desc]) => {
+                  const alreadySent = (currentRec.sentChannels ?? []).includes(k)
+                  const checked = channels[k]
+                  return (
+                    <label
+                      key={k}
+                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        checked
+                          ? 'bg-primary-50 border-primary-300'
+                          : 'bg-white border-slate-200 hover:border-primary-200'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-primary-600"
+                        checked={checked}
+                        onChange={(e) =>
+                          setChannels({ ...channels, [k]: e.target.checked })
+                        }
+                      />
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          checked
+                            ? 'bg-primary-100 text-primary-700'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        <Ico className="w-4.5 h-4.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p
+                            className={`text-sm font-medium ${
+                              checked ? 'text-primary-800' : 'text-slate-700'
+                            }`}
+                          >
+                            {label}
+                          </p>
+                          {alreadySent && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                              已发送
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button onClick={closeSendModal} className="btn-secondary">
+                取消
+              </button>
+              <button
+                onClick={confirmSend}
+                className="btn-primary flex items-center gap-1.5"
+              >
+                <Send className="w-4 h-4" />
+                确认发送
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+

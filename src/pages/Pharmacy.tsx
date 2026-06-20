@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { Pill, AlertTriangle, Clock, XCircle, Search } from 'lucide-react'
+import {
+  Pill,
+  AlertTriangle,
+  Clock,
+  XCircle,
+  Search,
+  CheckCircle2,
+  PackagePlus,
+  TrendingUp,
+} from 'lucide-react'
 import { useAppStore } from '@/stores/useAppStore'
 
 const categoryMap: Record<string, string> = {
@@ -39,14 +48,15 @@ const statusOptions = [
 
 const tabs = ['药品库存', '发药校验', '药品入库']
 
-const inboundRecords = [
-  { date: '2026-06-20', drug: '阿莫西林克拉维酸', quantity: 200, batchNo: 'AMC-2026-021', supplier: '北京拜耳动物保健' },
-  { date: '2026-06-18', drug: '马罗匹坦', quantity: 50, batchNo: 'MRP-2026-022', supplier: '硕腾(上海)动物保健' },
-  { date: '2026-06-15', drug: '奥美拉唑', quantity: 100, batchNo: 'OMP-2026-023', supplier: '阿斯利康动物保健' },
-]
-
 export default function Pharmacy() {
-  const { drugs, medicalRecords } = useAppStore()
+  const {
+    drugs,
+    medicalRecords,
+    inboundRecords,
+    inboundDrug: doInbound,
+    currentUser,
+    addOperationLog,
+  } = useAppStore()
   const [activeTab, setActiveTab] = useState(0)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -58,11 +68,16 @@ export default function Pharmacy() {
   const [inboundExpDate, setInboundExpDate] = useState('')
   const [inboundSupplier, setInboundSupplier] = useState('')
 
-  const lowStockCount = drugs.filter(d => d.status === 'low_stock').length
-  const nearExpiryCount = drugs.filter(d => d.status === 'near_expiry').length
-  const expiredCount = drugs.filter(d => d.status === 'expired').length
+  const [inboundResult, setInboundResult] = useState<{
+    type: 'success' | 'error'
+    msg: string
+  } | null>(null)
 
-  const filteredDrugs = drugs.filter(d => {
+  const lowStockCount = drugs.filter((d) => d.status === 'low_stock').length
+  const nearExpiryCount = drugs.filter((d) => d.status === 'near_expiry').length
+  const expiredCount = drugs.filter((d) => d.status === 'expired').length
+
+  const filteredDrugs = drugs.filter((d) => {
     if (search && !d.name.includes(search) && !d.batchNo.includes(search)) return false
     if (categoryFilter && d.category !== categoryFilter) return false
     if (statusFilter && d.status !== statusFilter) return false
@@ -71,11 +86,16 @@ export default function Pharmacy() {
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case 'normal': return <span className="status-badge bg-green-100 text-green-700">正常</span>
-      case 'low_stock': return <span className="status-badge bg-red-100 text-red-700">库存不足</span>
-      case 'near_expiry': return <span className="status-badge bg-yellow-100 text-yellow-700">近效期</span>
-      case 'expired': return <span className="status-badge bg-red-100 text-red-700">已过期</span>
-      default: return null
+      case 'normal':
+        return <span className="status-badge bg-green-100 text-green-700">正常</span>
+      case 'low_stock':
+        return <span className="status-badge bg-red-100 text-red-700">库存不足</span>
+      case 'near_expiry':
+        return <span className="status-badge bg-yellow-100 text-yellow-700">近效期</span>
+      case 'expired':
+        return <span className="status-badge bg-red-100 text-red-700">已过期</span>
+      default:
+        return null
     }
   }
 
@@ -86,14 +106,79 @@ export default function Pharmacy() {
     name: p.drugName,
     checks: [
       { label: '适应症匹配', passed: i !== 1 },
-      { label: '剂量校验', passed: i !== 0, warning: i === 0 ? '剂量偏高，建议确认' : undefined },
+      {
+        label: '剂量校验',
+        passed: i !== 0,
+        warning: i === 0 ? '剂量偏高，建议确认' : undefined,
+      },
       { label: '配伍禁忌', passed: true },
-      { label: '过敏冲突', passed: i !== 2, warning: i === 2 ? '存在过敏风险' : undefined },
+      {
+        label: '过敏冲突',
+        passed: i !== 2,
+        warning: i === 2 ? '存在过敏风险' : undefined,
+      },
       { label: '效期库存', passed: i !== 2 },
     ],
   }))
 
-  const hasAnyFailure = verificationResults.some(v => v.checks.some(c => !c.passed))
+  const hasAnyFailure = verificationResults.some((v) =>
+    v.checks.some((c) => !c.passed)
+  )
+
+  const handleInbound = () => {
+    setInboundResult(null)
+    if (!inboundDrug) {
+      setInboundResult({ type: 'error', msg: '请选择入库药品' })
+      return
+    }
+    if (!inboundQty) {
+      setInboundResult({ type: 'error', msg: '请输入入库数量' })
+      return
+    }
+    const qty = parseInt(inboundQty)
+    const drug = drugs.find((d) => d.id === inboundDrug)
+    if (!drug) {
+      setInboundResult({ type: 'error', msg: '药品不存在' })
+      return
+    }
+    const result = doInbound(
+      inboundDrug,
+      qty,
+      inboundBatch.trim() || `AUTO-${Date.now()}`,
+      inboundExpDate.trim() || undefined,
+      inboundSupplier.trim() || undefined
+    )
+    if (!result.success) {
+      setInboundResult({
+        type: 'error',
+        msg: `入库失败：${result.reason ?? '未知原因'}`,
+      })
+      return
+    }
+    addOperationLog({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      action: '入库',
+      module: '药房管理',
+      detail: `药品 ${drug.name} 入库 ${qty} 单位，批号 ${
+        (inboundBatch.trim() || result.data?.batchNo) ?? 'AUTO'
+      }`,
+      timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      ip: '192.168.1.100',
+    })
+    setInboundResult({
+      type: 'success',
+      msg: `入库成功！${drug.name} × ${qty}，当前库存 ${
+        result.data?.stock ?? '已更新'
+      }`,
+    })
+    setInboundQty('')
+    setInboundBatch('')
+    setInboundProdDate('')
+    setInboundExpDate('')
+    setInboundSupplier('')
+    setTimeout(() => setInboundResult(null), 3500)
+  }
 
   return (
     <div className="page-container">
@@ -143,7 +228,10 @@ export default function Pharmacy() {
           {tabs.map((tab, i) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(i)}
+              onClick={() => {
+                setActiveTab(i)
+                setInboundResult(null)
+              }}
               className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 activeTab === i
                   ? 'text-primary-700 border-primary-700'
@@ -151,6 +239,11 @@ export default function Pharmacy() {
               }`}
             >
               {tab}
+              {i === 2 && inboundRecords.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-primary-100 text-primary-700 text-xs">
+                  {inboundRecords.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -164,26 +257,30 @@ export default function Pharmacy() {
                   type="text"
                   placeholder="搜索药品名称或批号..."
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
+                  onChange={(e) => setSearch(e.target.value)}
                   className="input-field pl-9"
                 />
               </div>
               <select
                 value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value)}
+                onChange={(e) => setCategoryFilter(e.target.value)}
                 className="select-field w-40"
               >
-                {categoryOptions.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                {categoryOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
                 ))}
               </select>
               <select
                 value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
+                onChange={(e) => setStatusFilter(e.target.value)}
                 className="select-field w-36"
               >
-                {statusOptions.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                {statusOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -205,15 +302,24 @@ export default function Pharmacy() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredDrugs.map(drug => {
+                  {filteredDrugs.map((drug) => {
                     const ratio = Math.min(drug.stock / drug.minStock, 2)
-                    const barColor = drug.stock < drug.minStock ? 'bg-red-500' : 'bg-teal-500'
+                    const barColor =
+                      drug.stock < drug.minStock ? 'bg-red-500' : 'bg-teal-500'
                     return (
                       <tr key={drug.id} className="hover:bg-slate-50">
-                        <td className="px-3 py-3 font-medium text-slate-800">{drug.name}</td>
-                        <td className="px-3 py-3 text-slate-600">{categoryMap[drug.category]}</td>
-                        <td className="px-3 py-3 text-slate-600">{drug.specification}</td>
-                        <td className="px-3 py-3 text-slate-600">¥{drug.price.toFixed(1)}</td>
+                        <td className="px-3 py-3 font-medium text-slate-800">
+                          {drug.name}
+                        </td>
+                        <td className="px-3 py-3 text-slate-600">
+                          {categoryMap[drug.category]}
+                        </td>
+                        <td className="px-3 py-3 text-slate-600">
+                          {drug.specification}
+                        </td>
+                        <td className="px-3 py-3 text-slate-600">
+                          ¥{drug.price.toFixed(1)}
+                        </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
                             <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -222,15 +328,25 @@ export default function Pharmacy() {
                                 style={{ width: `${(ratio / 2) * 100}%` }}
                               />
                             </div>
-                            <span className={drug.stock < drug.minStock ? 'text-red-600 font-medium' : 'text-slate-600'}>
+                            <span
+                              className={
+                                drug.stock < drug.minStock
+                                  ? 'text-red-600 font-medium'
+                                  : 'text-slate-600'
+                              }
+                            >
                               {drug.stock}
                             </span>
                           </div>
                         </td>
                         <td className="px-3 py-3 text-slate-600">{drug.minStock}</td>
-                        <td className="px-3 py-3 text-slate-600 font-mono text-xs">{drug.batchNo}</td>
+                        <td className="px-3 py-3 text-slate-600 font-mono text-xs">
+                          {drug.batchNo}
+                        </td>
                         <td className="px-3 py-3 text-slate-600">{drug.expiryDate}</td>
-                        <td className="px-3 py-3 text-slate-600">{drug.storageCondition}</td>
+                        <td className="px-3 py-3 text-slate-600">
+                          {drug.storageCondition}
+                        </td>
                         <td className="px-3 py-3">{statusBadge(drug.status)}</td>
                       </tr>
                     )
@@ -251,26 +367,35 @@ export default function Pharmacy() {
                 <div>日期: {sampleRecord?.date}</div>
               </div>
               <div className="mt-3 flex gap-6">
-                {prescriptions.map(p => (
+                {prescriptions.map((p) => (
                   <div key={p.drugId} className="text-sm">
                     <span className="font-medium text-slate-700">{p.drugName}</span>
-                    <span className="text-slate-500 ml-2">{p.dosage} {p.frequency} × {p.duration}</span>
+                    <span className="text-slate-500 ml-2">
+                      {p.dosage} {p.frequency} × {p.duration}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              {verificationResults.map(result => (
-                <div key={result.name} className="border border-slate-200 rounded-lg p-4">
-                  <div className="font-medium text-slate-800 mb-3">{result.name}</div>
+              {verificationResults.map((result) => (
+                <div
+                  key={result.name}
+                  className="border border-slate-200 rounded-lg p-4"
+                >
+                  <div className="font-medium text-slate-800 mb-3">
+                    {result.name}
+                  </div>
                   <div className="space-y-2">
-                    {result.checks.map(check => (
+                    {result.checks.map((check) => (
                       <div key={check.label} className="flex items-center gap-2 text-sm">
                         {check.passed ? (
                           <span className="text-green-600 font-medium">✓ 通过</span>
                         ) : (
-                          <span className="text-red-600 font-medium">✗ {check.warning || '不匹配'}</span>
+                          <span className="text-red-600 font-medium">
+                            ✗ {check.warning || '不匹配'}
+                          </span>
                         )}
                         <span className="text-slate-500">{check.label}</span>
                       </div>
@@ -282,7 +407,9 @@ export default function Pharmacy() {
 
             {hasAnyFailure && (
               <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="text-red-700 font-medium">⚠ 发药拦截 - 存在异常项需医生确认</div>
+                <div className="text-red-700 font-medium">
+                  ⚠ 发药拦截 - 存在异常项需医生确认
+                </div>
               </div>
             )}
 
@@ -295,95 +422,219 @@ export default function Pharmacy() {
 
         {activeTab === 2 && (
           <div>
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            {inboundResult && (
+              <div
+                className={`mb-4 p-4 rounded-lg text-sm flex items-start gap-2 ${
+                  inboundResult.type === 'success'
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}
+              >
+                {inboundResult.type === 'success' ? (
+                  <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                ) : (
+                  <XCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <p className="font-medium">
+                    {inboundResult.type === 'success' ? '入库成功' : '入库失败'}
+                  </p>
+                  <p className="text-xs opacity-80 mt-0.5">{inboundResult.msg}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">药品名称</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  药品名称 <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={inboundDrug}
-                  onChange={e => setInboundDrug(e.target.value)}
+                  onChange={(e) => setInboundDrug(e.target.value)}
                   className="select-field"
                 >
                   <option value="">请选择药品</option>
-                  {drugs.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
+                  {drugs.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.specification})
+                    </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">入库数量</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  入库数量 <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
+                  min={1}
                   value={inboundQty}
-                  onChange={e => setInboundQty(e.target.value)}
+                  onChange={(e) => setInboundQty(e.target.value)}
                   className="input-field"
-                  placeholder="请输入数量"
+                  placeholder="请输入正数数量"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  数量必须大于 0，否则将拒绝入库
+                </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">批号</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  批号
+                </label>
                 <input
                   type="text"
                   value={inboundBatch}
-                  onChange={e => setInboundBatch(e.target.value)}
+                  onChange={(e) => setInboundBatch(e.target.value)}
                   className="input-field"
-                  placeholder="请输入批号"
+                  placeholder="自动生成或输入"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">生产日期</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  生产日期
+                </label>
                 <input
                   type="date"
                   value={inboundProdDate}
-                  onChange={e => setInboundProdDate(e.target.value)}
+                  onChange={(e) => setInboundProdDate(e.target.value)}
                   className="input-field"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">有效期</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  有效期至
+                </label>
                 <input
                   type="date"
                   value={inboundExpDate}
-                  onChange={e => setInboundExpDate(e.target.value)}
+                  onChange={(e) => setInboundExpDate(e.target.value)}
                   className="input-field"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  若已过期将拒绝入库（今日 2026-06-20）
+                </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">供应商</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  供应商
+                </label>
                 <input
                   type="text"
                   value={inboundSupplier}
-                  onChange={e => setInboundSupplier(e.target.value)}
+                  onChange={(e) => setInboundSupplier(e.target.value)}
                   className="input-field"
-                  placeholder="请输入供应商"
+                  placeholder="请输入供应商名称"
                 />
               </div>
             </div>
-            <button className="btn-primary mb-8">确认入库</button>
+
+            {inboundDrug && (() => {
+              const d = drugs.find((x) => x.id === inboundDrug)
+              if (!d) return null
+              return (
+                <div className="mb-5 p-3 rounded-lg bg-primary-50 border border-primary-100 text-sm space-y-1">
+                  <div className="flex gap-6">
+                    <p>
+                      <span className="text-slate-500">当前库存：</span>
+                      <span className="font-semibold text-primary-700">
+                        {d.stock}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="text-slate-500">最低库存：</span>
+                      <span className="font-medium">{d.minStock}</span>
+                    </p>
+                    <p>
+                      <span className="text-slate-500">原批号：</span>
+                      <span className="font-mono text-xs">{d.batchNo}</span>
+                    </p>
+                    <p>
+                      <span className="text-slate-500">原有效期：</span>
+                      <span>{d.expiryDate}</span>
+                    </p>
+                  </div>
+                </div>
+              )
+            })()}
+
+            <button
+              onClick={handleInbound}
+              className="btn-primary mb-8 flex items-center gap-2"
+            >
+              <PackagePlus className="w-4 h-4" />
+              确认入库
+            </button>
 
             <div>
-              <h3 className="text-sm font-medium text-slate-700 mb-3">近期入库记录</h3>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="table-header">
-                    <th className="px-3 py-3">入库日期</th>
-                    <th className="px-3 py-3">药品名称</th>
-                    <th className="px-3 py-3">入库数量</th>
-                    <th className="px-3 py-3">批号</th>
-                    <th className="px-3 py-3">供应商</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {inboundRecords.map((r, i) => (
-                    <tr key={i} className="hover:bg-slate-50">
-                      <td className="px-3 py-3 text-slate-600">{r.date}</td>
-                      <td className="px-3 py-3 font-medium text-slate-800">{r.drug}</td>
-                      <td className="px-3 py-3 text-slate-600">{r.quantity}</td>
-                      <td className="px-3 py-3 text-slate-600 font-mono text-xs">{r.batchNo}</td>
-                      <td className="px-3 py-3 text-slate-600">{r.supplier}</td>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-primary-600" />
+                  近期入库记录（实时）
+                </h3>
+                <span className="text-xs text-slate-400">
+                  共 {inboundRecords.length} 条
+                </span>
+              </div>
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="table-header">
+                      <th className="px-3 py-3">入库日期</th>
+                      <th className="px-3 py-3">药品名称</th>
+                      <th className="px-3 py-3">入库数量</th>
+                      <th className="px-3 py-3">批号</th>
+                      <th className="px-3 py-3">供应商</th>
+                      <th className="px-3 py-3">操作人</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                  {[...inboundRecords]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.timestamp).getTime() -
+                          new Date(a.timestamp).getTime()
+                      )
+                      .map((r, i) => {
+                        const [datePart, timePart] = r.timestamp.split(' ')
+                        return (
+                          <tr key={i} className="hover:bg-slate-50 bg-white">
+                            <td className="px-3 py-3 text-slate-600">
+                              {datePart} {timePart}
+                            </td>
+                            <td className="px-3 py-3 font-medium text-slate-800">
+                              {r.drugName}
+                            </td>
+                            <td className="px-3 py-3 text-slate-600">
+                              <span className="inline-flex items-center gap-1 text-green-700 font-semibold">
+                                +{r.quantity}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 text-slate-600 font-mono text-xs">
+                              {r.batchNo}
+                            </td>
+                            <td className="px-3 py-3 text-slate-600">
+                              {r.supplier || '-'}
+                            </td>
+                            <td className="px-3 py-3 text-slate-500 text-xs">
+                              {r.operator || '系统'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    {inboundRecords.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-3 py-8 text-center text-slate-400"
+                        >
+                          暂无入库记录
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

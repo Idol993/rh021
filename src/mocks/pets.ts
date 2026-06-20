@@ -82,8 +82,8 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2025-06-15', expiryDate: '2026-06-15', batchNo: 'RB-2025-C0118', status: 'expiring' },
     ],
     dewormingRecords: [
-      { date: '2026-03-20', drugName: '芬苯达唑', nextDate: '2026-06-20' },
-      { date: '2025-12-20', drugName: '吡喹酮', nextDate: '2026-06-20' },
+      { type: '体内驱虫', date: '2026-03-20', drugName: '芬苯达唑', nextDate: '2026-06-20' },
+      { type: '体内驱虫', date: '2025-12-20', drugName: '吡喹酮', nextDate: '2026-06-20' },
     ],
     neutered: true,
     chipNo: '156000001A',
@@ -106,7 +106,7 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2024-10-05', expiryDate: '2025-10-05', batchNo: 'RB-2024-F0897', status: 'expired' },
     ],
     dewormingRecords: [
-      { date: '2026-04-15', drugName: '芬苯达唑', nextDate: '2026-07-15' },
+      { type: '体内驱虫', date: '2026-04-15', drugName: '芬苯达唑', nextDate: '2026-07-15' },
     ],
     neutered: true,
     chipNo: '156000002B',
@@ -129,7 +129,7 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2026-01-10', expiryDate: '2027-01-10', batchNo: 'RB-2026-I0222', status: 'valid' },
     ],
     dewormingRecords: [
-      { date: '2026-05-01', drugName: '芬苯达唑', nextDate: '2026-08-01' },
+      { type: '体内驱虫', date: '2026-05-01', drugName: '芬苯达唑', nextDate: '2026-08-01' },
     ],
     neutered: false,
     createdAt: '2024-08-10',
@@ -150,7 +150,7 @@ export const mockPets: Pet[] = [
       { name: '猫杯状病毒疫苗', date: '2025-05-20', expiryDate: '2026-05-20', batchNo: 'FCV-2025-K0401', status: 'expiring' },
     ],
     dewormingRecords: [
-      { date: '2026-02-10', drugName: '吡喹酮', nextDate: '2026-05-10' },
+      { type: '体内驱虫', date: '2026-02-10', drugName: '吡喹酮', nextDate: '2026-05-10' },
     ],
     neutered: true,
     createdAt: '2025-02-14',
@@ -172,7 +172,7 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2025-11-15', expiryDate: '2026-11-15', batchNo: 'RB-2025-N0698', status: 'valid' },
     ],
     dewormingRecords: [
-      { date: '2026-05-10', drugName: '芬苯达唑', nextDate: '2026-08-10' },
+      { type: '体内驱虫', date: '2026-05-10', drugName: '芬苯达唑', nextDate: '2026-08-10' },
     ],
     neutered: true,
     chipNo: '156000005F',
@@ -194,7 +194,7 @@ export const mockPets: Pet[] = [
       { name: '猫鼻支疫苗', date: '2025-08-01', expiryDate: '2026-08-01', batchNo: 'FHV-2025-P0856', status: 'valid' },
     ],
     dewormingRecords: [
-      { date: '2026-04-01', drugName: '芬苯达唑', nextDate: '2026-07-01' },
+      { type: '体内驱虫', date: '2026-04-01', drugName: '芬苯达唑', nextDate: '2026-07-01' },
     ],
     neutered: true,
     createdAt: '2025-02-14',
@@ -216,7 +216,7 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2024-09-30', expiryDate: '2025-09-30', batchNo: 'RB-2024-S1023', status: 'expired' },
     ],
     dewormingRecords: [
-      { date: '2026-03-15', drugName: '吡喹酮', nextDate: '2026-06-15' },
+      { type: '体内驱虫', date: '2026-03-15', drugName: '吡喹酮', nextDate: '2026-06-15' },
     ],
     neutered: true,
     createdAt: '2025-04-22',
@@ -238,7 +238,7 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2026-02-28', expiryDate: '2027-02-28', batchNo: 'RB-2026-V1234', status: 'valid' },
     ],
     dewormingRecords: [
-      { date: '2026-05-28', drugName: '芬苯达唑', nextDate: '2026-08-28' },
+      { type: '体内驱虫', date: '2026-05-28', drugName: '芬苯达唑', nextDate: '2026-08-28' },
     ],
     neutered: false,
     chipNo: '156000008H',
@@ -261,8 +261,8 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2025-07-15', expiryDate: '2026-07-15', batchNo: 'RB-2025-Y1423', status: 'expiring' },
     ],
     dewormingRecords: [
-      { date: '2026-01-10', drugName: '芬苯达唑', nextDate: '2026-04-10' },
-      { date: '2026-04-10', drugName: '吡喹酮', nextDate: '2026-07-10' },
+      { type: '体内驱虫', date: '2026-01-10', drugName: '芬苯达唑', nextDate: '2026-04-10' },
+      { type: '体内驱虫', date: '2026-04-10', drugName: '吡喹酮', nextDate: '2026-07-10' },
     ],
     neutered: true,
     createdAt: '2025-04-22',
@@ -284,7 +284,7 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2025-06-01', expiryDate: '2026-06-01', batchNo: 'RB-2025-AB1623', status: 'expiring' },
     ],
     dewormingRecords: [
-      { date: '2026-03-01', drugName: '芬苯达唑', nextDate: '2026-06-01' },
+      { type: '体内驱虫', date: '2026-03-01', drugName: '芬苯达唑', nextDate: '2026-06-01' },
     ],
     neutered: true,
     chipNo: '156000010J',
@@ -306,7 +306,7 @@ export const mockPets: Pet[] = [
       { name: '猫鼻支疫苗', date: '2026-03-15', expiryDate: '2027-03-15', batchNo: 'FHV-2026-AD1767', status: 'valid' },
     ],
     dewormingRecords: [
-      { date: '2026-06-01', drugName: '芬苯达唑', nextDate: '2026-09-01' },
+      { type: '体内驱虫', date: '2026-06-01', drugName: '芬苯达唑', nextDate: '2026-09-01' },
     ],
     neutered: false,
     createdAt: '2025-03-10',
@@ -328,7 +328,7 @@ export const mockPets: Pet[] = [
       { name: '狂犬疫苗', date: '2025-11-20', expiryDate: '2026-11-20', batchNo: 'RB-2025-AG1923', status: 'valid' },
     ],
     dewormingRecords: [
-      { date: '2026-05-15', drugName: '吡喹酮', nextDate: '2026-08-15' },
+      { type: '体内驱虫', date: '2026-05-15', drugName: '吡喹酮', nextDate: '2026-08-15' },
     ],
     neutered: true,
     createdAt: '2025-11-15',

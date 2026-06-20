@@ -13,9 +13,11 @@ export interface VaccineRecord {
   expiryDate: string
   batchNo: string
   status: 'valid' | 'expiring' | 'expired'
+  institution?: string
 }
 
 export interface DewormingRecord {
+  type: string
   date: string
   drugName: string
   nextDate: string
@@ -52,7 +54,7 @@ export interface Drug {
   batchNo: string
   productionDate: string
   expiryDate: string
-  status: 'normal' | 'low_stock' | 'near_expiry' | 'expired'
+  status: 'normal' | 'low_stock' | 'near_expiry' | 'expired' | 'locked'
   storageCondition: string
 }
 
@@ -141,14 +143,45 @@ export interface Bed {
 export interface Member {
   id: string
   ownerId: string
+  memberNo: string
   level: '普通会员' | '银卡会员' | '金卡会员' | '钻石会员'
+  tier: 'new' | 'silver' | 'gold' | 'platinum'
   points: number
   balance: number
   joinDate: string
   expiryDate: string
   discount: number
   totalSpent: number
-  recommendations: string[]
+  recommendations: Recommendation[]
+}
+
+export interface InboundRecord {
+  id: string
+  drugId: string
+  drugName: string
+  quantity: number
+  batchNo: string
+  expiryDate: string
+  supplier?: string
+  operator?: string
+  timestamp: string
+}
+
+export interface Recommendation {
+  id: string
+  memberId: string
+  type: 'vaccine' | 'deworming' | 'rehab' | 'package' | 'insurance' | 'supplement'
+  title: string
+  description: string
+  reason: string
+  petId?: string
+  petName?: string
+  status: 'pending' | 'sent' | 'converted' | 'dismissed'
+  channels: ('app' | 'sms' | 'wechat')[]
+  sentChannels: ('app' | 'sms' | 'wechat')[]
+  sentAt?: string
+  convertedAt?: string
+  createdAt: string
 }
 
 export interface FinanceRecord {

@@ -158,20 +158,22 @@ export default function Diagnosis() {
                         </span>
                       </td>
                       <td className="py-3 px-3">
-                        {appt.status === 'scheduled' ? (
+                        {appt.status === 'scheduled' || appt.status === 'in_progress' ? (
                           <Link
-                            to={`/diagnosis/${appt.petId}`}
-                            className="btn-primary text-xs px-3 py-1.5 inline-block"
+                            to={`/diagnosis/consultation/${appt.id}`}
+                            className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
                           >
-                            开始诊疗
+                            {appt.status === 'scheduled' ? '开始诊疗' : '继续诊疗'}
                           </Link>
                         ) : (
-                          <Link
-                            to={`/diagnosis/${appt.petId}`}
-                            className="btn-secondary text-xs px-3 py-1.5 inline-block"
-                          >
-                            查看
-                          </Link>
+                          <div className="flex items-center gap-1.5">
+                            <Link
+                              to={`/diagnosis/consultation/${appt.id}`}
+                              className="btn-secondary text-xs px-3 py-1.5 inline-block"
+                            >
+                              再次接诊
+                            </Link>
+                          </div>
                         )}
                       </td>
                     </tr>
