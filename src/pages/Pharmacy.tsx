@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Pill,
   AlertTriangle,
@@ -8,6 +9,7 @@ import {
   CheckCircle2,
   PackagePlus,
   TrendingUp,
+  FileText,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/useAppStore'
 
@@ -53,7 +55,12 @@ export default function Pharmacy() {
     drugs,
     medicalRecords,
     inboundRecords,
+    dispenseRecords,
     inboundDrug: doInbound,
+    checkPrescription,
+    dispensePrescription,
+    getPetById,
+    getOwnerById,
     currentUser,
     addOperationLog,
   } = useAppStore()
@@ -72,6 +79,11 @@ export default function Pharmacy() {
     type: 'success' | 'error'
     msg: string
   } | null>(null)
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
+  const [dispenseResult, setDispenseResult] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [verifyingId, setVerifyingId] = useState<string | null>(null)
+  const [verifyResult, setVerifyResult] = useState<{ passed: boolean; warnings: string[]; errors: string[] } | null>(null)
+  const [dispenseSubTab, setDispenseSubTab] = useState(0)
 
   const lowStockCount = drugs.filter((d) => d.status === 'low_stock').length
   const nearExpiryCount = drugs.filter((d) => d.status === 'near_expiry').length
@@ -99,31 +111,33 @@ export default function Pharmacy() {
     }
   }
 
-  const sampleRecord = medicalRecords[0]
-  const prescriptions = sampleRecord?.prescriptions ?? []
-
-  const verificationResults = prescriptions.map((p, i) => ({
-    name: p.drugName,
-    checks: [
-      { label: '适应症匹配', passed: i !== 1 },
-      {
-        label: '剂量校验',
-        passed: i !== 0,
-        warning: i === 0 ? '剂量偏高，建议确认' : undefined,
-      },
-      { label: '配伍禁忌', passed: true },
-      {
-        label: '过敏冲突',
-        passed: i !== 2,
-        warning: i === 2 ? '存在过敏风险' : undefined,
-      },
-      { label: '效期库存', passed: i !== 2 },
-    ],
-  }))
-
-  const hasAnyFailure = verificationResults.some((v) =>
-    v.checks.some((c) => !c.passed)
+  const pendingRecords = medicalRecords.filter(
+    (r) => r.prescriptions.length > 0 && !r.dispensed
   )
+
+  const handleVerifyAndDispense = (recordId: string) => {
+    setDispenseResult(null)
+    setVerifyResult(null)
+    setVerifyingId(recordId)
+    const result = checkPrescription(recordId)
+    setVerifyResult(result)
+    if (!result.passed) {
+      setTimeout(() => setVerifyingId(null), 300)
+      return
+    }
+    if (confirm('校验通过，确认发药？')) {
+      const dispResult = dispensePrescription(recordId)
+      if (dispResult.success) {
+        setDispenseResult({ type: 'success', msg: '发药成功！库存已扣减' })
+      } else {
+        setDispenseResult({ type: 'error', msg: `发药失败：${dispResult.reason}` })
+      }
+    }
+    setTimeout(() => {
+      setVerifyingId(null)
+      setTimeout(() => setDispenseResult(null), 4000)
+    }, 300)
+  }
 
   const handleInbound = () => {
     setInboundResult(null)
@@ -359,64 +373,211 @@ export default function Pharmacy() {
 
         {activeTab === 1 && (
           <div>
-            <div className="mb-4 p-4 bg-slate-50 rounded-lg">
-              <div className="text-sm font-medium text-slate-700 mb-2">处方信息</div>
-              <div className="grid grid-cols-3 gap-4 text-sm text-slate-600">
-                <div>病历号: {sampleRecord?.id}</div>
-                <div>诊断: {sampleRecord?.diagnosis}</div>
-                <div>日期: {sampleRecord?.date}</div>
-              </div>
-              <div className="mt-3 flex gap-6">
-                {prescriptions.map((p) => (
-                  <div key={p.drugId} className="text-sm">
-                    <span className="font-medium text-slate-700">{p.drugName}</span>
-                    <span className="text-slate-500 ml-2">
-                      {p.dosage} {p.frequency} × {p.duration}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {verificationResults.map((result) => (
-                <div
-                  key={result.name}
-                  className="border border-slate-200 rounded-lg p-4"
-                >
-                  <div className="font-medium text-slate-800 mb-3">
-                    {result.name}
-                  </div>
-                  <div className="space-y-2">
-                    {result.checks.map((check) => (
-                      <div key={check.label} className="flex items-center gap-2 text-sm">
-                        {check.passed ? (
-                          <span className="text-green-600 font-medium">✓ 通过</span>
-                        ) : (
-                          <span className="text-red-600 font-medium">
-                            ✗ {check.warning || '不匹配'}
-                          </span>
-                        )}
-                        <span className="text-slate-500">{check.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {hasAnyFailure && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="text-red-700 font-medium">
-                  ⚠ 发药拦截 - 存在异常项需医生确认
+            {dispenseResult && (
+              <div
+                className={`mb-4 p-4 rounded-lg text-sm flex items-start gap-2 ${
+                  dispenseResult.type === 'success'
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}
+              >
+                {dispenseResult.type === 'success' ? (
+                  <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                ) : (
+                  <XCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <p className="font-medium">
+                    {dispenseResult.type === 'success' ? '发药成功' : '发药失败'}
+                  </p>
+                  <p className="text-xs opacity-80 mt-0.5">{dispenseResult.msg}</p>
                 </div>
               </div>
             )}
 
-            <div className="mt-6 flex gap-3">
-              <button className="btn-primary">医生授权确认</button>
-              <button className="btn-secondary">取消发药</button>
+            <div className="flex gap-1 mb-6 border-b border-slate-200">
+              {['待发药处方', '发药记录'].map((tab, i) => (
+                <button
+                  key={tab}
+                  onClick={() => {
+                    setDispenseSubTab(i)
+                    setVerifyResult(null)
+                    setDispenseResult(null)
+                  }}
+                  className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                    dispenseSubTab === i
+                      ? 'text-primary-700 border-primary-700'
+                      : 'text-slate-500 border-transparent hover:text-slate-700'
+                  }`}
+                >
+                  {tab}
+                  {i === 0 && pendingRecords.length > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs">
+                      {pendingRecords.length}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
+
+            {dispenseSubTab === 0 && (
+              <div>
+                {verifyResult && (
+                  <div className="mb-4 space-y-2">
+                    {verifyResult.errors.length > 0 && (
+                      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="text-red-700 font-medium mb-2 flex items-center gap-2">
+                          <XCircle className="w-4 h-4" />
+                          校验错误
+                        </div>
+                        <ul className="text-sm text-red-600 space-y-1">
+                          {verifyResult.errors.map((err, i) => (
+                            <li key={i}>• {err}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {verifyResult.warnings.length > 0 && (
+                      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="text-yellow-700 font-medium mb-2 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          校验警告
+                        </div>
+                        <ul className="text-sm text-yellow-700 space-y-1">
+                          {verifyResult.warnings.map((warn, i) => (
+                            <li key={i}>• {warn}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {verifyResult.passed && verifyResult.errors.length === 0 && verifyResult.warnings.length === 0 && (
+                      <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="text-green-700 font-medium flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4" />
+                          校验全部通过
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {pendingRecords.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400">
+                    暂无待发药处方
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {pendingRecords.map((record) => {
+                      const pet = getPetById(record.petId)
+                      const owner = getOwnerById(record.ownerId)
+                      return (
+                        <div
+                          key={record.id}
+                          className={`card transition-all ${
+                            verifyingId === record.id ? 'ring-2 ring-primary-500' : ''
+                          }`}
+                        >
+                          <div className="flex justify-between gap-6">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-3">
+                                <span className="font-bold text-slate-800">{record.id}</span>
+                                <span className="status-badge bg-orange-100 text-orange-700">待发药</span>
+                              </div>
+                              <div className="text-sm text-slate-600 flex gap-4">
+                                <span>宠物：{pet?.name || '-'}</span>
+                                <span>主人：{owner?.name || '-'}</span>
+                                <span>日期：{record.date}</span>
+                              </div>
+                              <div className="text-xs text-slate-400">
+                                诊断：{record.diagnosis}
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-xs text-slate-500 mb-2">处方药品</div>
+                              <div className="text-sm text-slate-600 space-y-1">
+                                {record.prescriptions.map((p, i) => (
+                                  <div key={i} className="flex justify-between">
+                                    <span>{p.drugName}</span>
+                                    <span className="text-slate-500">× {p.quantity}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex flex-col justify-end gap-2">
+                              <Link
+                                to={`/diagnosis/medical/${record.id}`}
+                                className="btn-secondary text-center text-xs"
+                              >
+                                <span className="flex items-center gap-1 justify-center">
+                                  <FileText className="w-3 h-3" />
+                                  查看病历
+                                </span>
+                              </Link>
+                              <button
+                                onClick={() => handleVerifyAndDispense(record.id)}
+                                disabled={verifyingId === record.id}
+                                className="btn-primary text-xs"
+                              >
+                                {verifyingId === record.id ? '处理中...' : '校验并发药'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {dispenseSubTab === 1 && (
+              <div>
+                {dispenseRecords.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400">
+                    暂无发药记录
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {[...dispenseRecords]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                      )
+                      .map((record) => (
+                        <div key={record.id} className="card">
+                          <div className="flex justify-between gap-6">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-3">
+                                <span className="font-bold text-slate-800">{record.recordId}</span>
+                                <span className="status-badge bg-green-100 text-green-700">已发药</span>
+                              </div>
+                              <div className="text-sm text-slate-600 flex gap-4">
+                                <span>发药时间：{record.timestamp}</span>
+                                <span>宠物：{record.petName}</span>
+                                <span>主人：{record.ownerName}</span>
+                                <span>操作人：{record.operator}</span>
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-xs text-slate-500 mb-2">发药明细</div>
+                              <div className="text-sm text-slate-600 space-y-1">
+                                {record.items.map((item, i) => (
+                                  <div key={i} className="flex justify-between">
+                                    <span>{item.drugName}</span>
+                                    <span className="text-slate-500">
+                                      × {item.quantity}（批号{item.batchNo}）
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

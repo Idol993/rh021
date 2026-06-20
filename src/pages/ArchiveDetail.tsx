@@ -1,5 +1,6 @@
+import { useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Syringe, Bug, Stethoscope, Pill } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { useAppStore } from '@/stores/useAppStore'
 import { differenceInYears, format } from 'date-fns'
@@ -7,7 +8,7 @@ import { differenceInYears, format } from 'date-fns'
 export default function ArchiveDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { getPetById, getOwnerById, getDoctorById, getMedicalRecordsByPetId } = useAppStore()
+  const { getPetById, getOwnerById, getDoctorById, getMedicalRecordsByPetId, getDispenseRecordsByPetId } = useAppStore()
 
   const pet = id ? getPetById(id) : undefined
   if (!pet) {
@@ -27,6 +28,43 @@ export default function ArchiveDetail() {
   const medicalRecords = getMedicalRecordsByPetId(pet.id)
   const sortedRecords = [...medicalRecords].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const latestRecord = sortedRecords[0]
+
+  const timelineEvents = useMemo(() => {
+    const events: { date: string; type: 'vaccine' | 'deworming' | 'visit' | 'dispense'; title: string; desc: string; icon: React.ReactNode; color: string; recordId?: string }[] = []
+    
+    pet.vaccineRecords.forEach(v => events.push({
+      date: v.date, type: 'vaccine', title: v.name,
+      desc: `接种${v.institution || ''}，有效期至${v.expiryDate}`,
+      icon: <Syringe className="w-3.5 h-3.5" />,
+      color: 'bg-green-500'
+    }))
+    
+    pet.dewormingRecords.forEach(d => events.push({
+      date: d.date, type: 'deworming', title: `${d.type}：${d.drugName}`,
+      desc: `下次驱虫：${d.nextDate}`,
+      icon: <Bug className="w-3.5 h-3.5" />,
+      color: 'bg-amber-500'
+    }))
+    
+    medicalRecords.forEach(r => events.push({
+      date: r.date, type: 'visit', title: `就诊：${r.diagnosis}`,
+      desc: `主诉：${r.chiefComplaint}`,
+      icon: <Stethoscope className="w-3.5 h-3.5" />,
+      color: 'bg-primary-500',
+      recordId: r.id
+    }))
+    
+    const dispenses = getDispenseRecordsByPetId(pet.id)
+    dispenses.forEach(d => events.push({
+      date: d.timestamp.split(' ')[0], type: 'dispense',
+      title: `发药：${d.items.map(i => i.drugName).join('、')}`,
+      desc: `共${d.items.length}种药品，操作人：${d.operator}`,
+      icon: <Pill className="w-3.5 h-3.5" />,
+      color: 'bg-teal-500'
+    }))
+    
+    return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [pet, medicalRecords, getDispenseRecordsByPetId])
 
   const calcAge = (birthDate: string) => {
     const years = differenceInYears(new Date(), new Date(birthDate))
@@ -270,16 +308,18 @@ export default function ArchiveDetail() {
                 const doctor = getDoctorById(record.doctorId)
                 const statusInfo = recordStatusLabel(record.status)
                 return (
-                  <div key={record.id} className="border border-slate-100 rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-400">{format(new Date(record.date), 'yyyy-MM-dd')}</span>
-                      <span className={`status-badge ${statusInfo.cls}`}>{statusInfo.label}</span>
+                  <Link key={record.id} to={`/diagnosis/medical/${record.id}`}>
+                    <div className="border border-slate-100 rounded-lg p-4 hover:bg-slate-50 transition-colors cursor-pointer">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-slate-400">{format(new Date(record.date), 'yyyy-MM-dd')}</span>
+                        <span className={`status-badge ${statusInfo.cls}`}>{statusInfo.label}</span>
+                      </div>
+                      <p className="font-medium text-sm mb-1">{record.diagnosis}</p>
+                      <p className="text-xs text-slate-400">
+                        主治医生: {doctor?.name || '-'} · 主诉: {record.chiefComplaint}
+                      </p>
                     </div>
-                    <p className="font-medium text-sm mb-1">{record.diagnosis}</p>
-                    <p className="text-xs text-slate-400">
-                      主治医生: {doctor?.name || '-'} · 主诉: {record.chiefComplaint}
-                    </p>
-                  </div>
+                  </Link>
                 )
               })}
             </div>
@@ -289,52 +329,36 @@ export default function ArchiveDetail() {
         </div>
       </div>
 
-      {latestRecord && (
-        <div className="grid grid-cols-2 gap-6">
-          <div className="card">
-            <h3 className="font-bold text-lg mb-4">最近处方</h3>
-            <div className="space-y-3">
-              {latestRecord.prescriptions.map((p, i) => (
-                <div key={i} className="bg-slate-50 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm">{p.drugName}</p>
-                    <span className="text-xs text-slate-400">{p.quantity}{p.drugName.includes('片') ? '片' : '支'}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {p.dosage} · {p.frequency} · {p.duration}
-                  </p>
-                </div>
-              ))}
-              {latestRecord.prescriptions.length === 0 && (
-                <p className="text-sm text-slate-400">无处方</p>
-              )}
-            </div>
-          </div>
-
-          <div className="card">
-            <h3 className="font-bold text-lg mb-4">最近检查结果</h3>
-            <div className="space-y-2">
-              {latestRecord.examResults.map((e, i) => (
-                <div key={i} className="flex items-center justify-between text-sm py-2 border-b border-slate-50 last:border-0">
-                  <span className="text-slate-600">{e.item}</span>
-                  <div className="flex items-center gap-3">
-                    <span className={e.abnormal ? 'text-red-600 font-medium' : 'text-slate-800'}>
-                      {e.result}
-                    </span>
-                    {e.abnormal && (
-                      <span className="status-badge bg-red-100 text-red-700">异常</span>
+      <div className="card">
+        <h3 className="font-bold text-lg mb-1">完整时间线</h3>
+        <p className="text-xs text-slate-400 mb-4">疫苗 · 驱虫 · 就诊 · 发药 全事件</p>
+        <div className="space-y-1">
+          {timelineEvents.map((ev, i) => (
+            <div key={i} className="relative pl-8 pb-5 border-l-2 border-slate-200 last:border-l-0 last:pb-1">
+              <div className={`absolute left-[-9px] top-0 w-4 h-4 rounded-full ${ev.color} flex items-center justify-center text-white`}>
+                {ev.icon}
+              </div>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">{ev.date}</span>
+                    {ev.recordId && (
+                      <Link to={`/diagnosis/medical/${ev.recordId}`} className="text-xs text-primary-600 underline hover:text-primary-700">
+                        查看病历
+                      </Link>
                     )}
                   </div>
-                  <span className="text-xs text-slate-400 min-w-[120px] text-right">{e.reference}</span>
+                  <p className="text-sm font-medium text-slate-800 mt-0.5">{ev.title}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{ev.desc}</p>
                 </div>
-              ))}
-              {latestRecord.examResults.length === 0 && (
-                <p className="text-sm text-slate-400">无检查结果</p>
-              )}
+              </div>
             </div>
-          </div>
+          ))}
+          {timelineEvents.length === 0 && (
+            <p className="text-sm text-slate-400 text-center py-4">暂无事件记录</p>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

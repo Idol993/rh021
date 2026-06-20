@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Stethoscope,
   CalendarCheck,
@@ -12,6 +12,35 @@ import {
   Activity,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/useAppStore'
+
+function StartDiagnosisButton({ apptId }: { apptId: string }) {
+  const navigate = useNavigate()
+  const { getAppointmentById, getMedicalRecordByAppointmentId } = useAppStore()
+  const appt = getAppointmentById(apptId)
+  const existingRecord = getMedicalRecordByAppointmentId(apptId)
+
+  if (!appt) return null
+
+  if (existingRecord) {
+    return (
+      <Link
+        to={`/diagnosis/medical/${existingRecord.id}`}
+        className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
+      >
+        查看病历
+      </Link>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => navigate(`/diagnosis/consultation/${apptId}`)}
+      className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
+    >
+      {appt.status === 'scheduled' ? '开始诊疗' : '继续诊疗'}
+    </button>
+  )
+}
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   scheduled: { label: '已预约', className: 'bg-blue-100 text-blue-700' },
@@ -30,7 +59,7 @@ const typeConfig: Record<string, { className: string }> = {
 }
 
 export default function Diagnosis() {
-  const { appointments, pets, owners, doctors, medicalRecords } = useAppStore()
+  const { appointments, pets, owners, doctors, medicalRecords, getMedicalRecordByAppointmentId } = useAppStore()
   const [activeTab, setActiveTab] = useState<'today' | 'all'>('today')
 
   const today = '2026-06-20'
@@ -159,12 +188,7 @@ export default function Diagnosis() {
                       </td>
                       <td className="py-3 px-3">
                         {appt.status === 'scheduled' || appt.status === 'in_progress' ? (
-                          <Link
-                            to={`/diagnosis/consultation/${appt.id}`}
-                            className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
-                          >
-                            {appt.status === 'scheduled' ? '开始诊疗' : '继续诊疗'}
-                          </Link>
+                          <StartDiagnosisButton apptId={appt.id} />
                         ) : (
                           <div className="flex items-center gap-1.5">
                             <Link

@@ -72,6 +72,7 @@ export interface ExamResult {
   result: string
   reference: string
   abnormal: boolean
+  unit?: string
 }
 
 export interface MedicalRecord {
@@ -79,6 +80,7 @@ export interface MedicalRecord {
   petId: string
   ownerId: string
   doctorId: string
+  appointmentId?: string
   date: string
   chiefComplaint: string
   presentIllness: string
@@ -91,6 +93,7 @@ export interface MedicalRecord {
   treatmentPlan: string
   followUpDate: string
   status: 'completed' | 'follow_up' | 'hospitalized'
+  dispensed?: boolean
 }
 
 export interface Appointment {
@@ -102,6 +105,7 @@ export interface Appointment {
   time: string
   type: '初诊' | '复诊' | '疫苗接种' | '驱虫' | '体检' | '手术'
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  medicalRecordId?: string
   notes?: string
 }
 
@@ -164,6 +168,23 @@ export interface InboundRecord {
   expiryDate: string
   supplier?: string
   operator?: string
+  timestamp: string
+}
+
+export interface DispenseRecord {
+  id: string
+  recordId: string
+  petId: string
+  petName: string
+  ownerName: string
+  items: {
+    drugId: string
+    drugName: string
+    quantity: number
+    batchNo: string
+    unit: string
+  }[]
+  operator: string
   timestamp: string
 }
 
