@@ -16,6 +16,28 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-01-15',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-001-001',
+        drugId: 'drug-001',
+        batchNo: 'AMC-2025-001',
+        productionDate: '2025-01-15',
+        expiryDate: '2027-01-15',
+        quantity: 300,
+        receivedDate: '2026-05-01',
+        supplier: '北京拜耳动物保健',
+      },
+      {
+        id: 'batch-drug-001-002',
+        drugId: 'drug-001',
+        batchNo: 'AMC-2026-002',
+        productionDate: '2026-01-15',
+        expiryDate: '2028-01-15',
+        quantity: 200,
+        receivedDate: '2026-05-15',
+        supplier: '北京拜耳动物保健',
+      },
+    ],
   },
   {
     id: 'drug-002',
@@ -32,6 +54,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-03-20',
     status: 'low_stock',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-002-001',
+        drugId: 'drug-002',
+        batchNo: 'CFX-2025-002',
+        productionDate: '2025-03-20',
+        expiryDate: '2027-03-20',
+        quantity: 45,
+        receivedDate: '2026-05-01',
+        supplier: '硕腾(上海)动物保健',
+      },
+    ],
   },
   {
     id: 'drug-003',
@@ -48,6 +82,28 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2026-06-10',
     status: 'near_expiry',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-003-001',
+        drugId: 'drug-003',
+        batchNo: 'MNZ-2024-003',
+        productionDate: '2024-06-10',
+        expiryDate: '2026-06-10',
+        quantity: 80,
+        receivedDate: '2026-05-01',
+        supplier: '梅里亚动物保健',
+      },
+      {
+        id: 'batch-drug-003-002',
+        drugId: 'drug-003',
+        batchNo: 'MNZ-2026-003',
+        productionDate: '2026-06-10',
+        expiryDate: '2028-06-10',
+        quantity: 300,
+        receivedDate: '2026-06-01',
+        supplier: '梅里亚动物保健',
+      },
+    ],
   },
   {
     id: 'drug-004',
@@ -64,6 +120,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-05-08',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-004-001',
+        drugId: 'drug-004',
+        batchNo: 'ENR-2025-004',
+        productionDate: '2025-05-08',
+        expiryDate: '2027-05-08',
+        quantity: 300,
+        receivedDate: '2026-05-01',
+        supplier: '北京拜耳动物保健',
+      },
+    ],
   },
   {
     id: 'drug-005',
@@ -80,6 +148,28 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-02-28',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-005-001',
+        drugId: 'drug-005',
+        batchNo: 'DOX-2025-005',
+        productionDate: '2025-02-28',
+        expiryDate: '2027-02-28',
+        quantity: 160,
+        receivedDate: '2026-05-01',
+        supplier: '勃林格殷格翰动物保健',
+      },
+      {
+        id: 'batch-drug-005-002',
+        drugId: 'drug-005',
+        batchNo: 'DOX-2026-005',
+        productionDate: '2026-02-28',
+        expiryDate: '2029-02-28',
+        quantity: 100,
+        receivedDate: '2026-05-20',
+        supplier: '勃林格殷格翰动物保健',
+      },
+    ],
   },
   {
     id: 'drug-006',
@@ -96,6 +186,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-04-15',
     status: 'normal',
     storageCondition: '常温干燥',
+    batches: [
+      {
+        id: 'batch-drug-006-001',
+        drugId: 'drug-006',
+        batchNo: 'ITC-2025-006',
+        productionDate: '2025-04-15',
+        expiryDate: '2027-04-15',
+        quantity: 150,
+        receivedDate: '2026-05-01',
+        supplier: '西安杨森动物保健',
+      },
+    ],
   },
   {
     id: 'drug-007',
@@ -112,6 +214,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2026-09-01',
     status: 'low_stock',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-007-001',
+        drugId: 'drug-007',
+        batchNo: 'FCZ-2024-007',
+        productionDate: '2024-09-01',
+        expiryDate: '2026-09-01',
+        quantity: 30,
+        receivedDate: '2026-05-01',
+        supplier: '辉瑞动物保健',
+      },
+    ],
   },
   {
     id: 'drug-008',
@@ -128,6 +242,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-08-22',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-008-001',
+        drugId: 'drug-008',
+        batchNo: 'FBD-2025-008',
+        productionDate: '2025-08-22',
+        expiryDate: '2027-08-22',
+        quantity: 420,
+        receivedDate: '2026-05-01',
+        supplier: '梅里亚动物保健',
+      },
+    ],
   },
   {
     id: 'drug-009',
@@ -144,6 +270,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2026-11-15',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-009-001',
+        drugId: 'drug-009',
+        batchNo: 'PZQ-2024-009',
+        productionDate: '2024-11-15',
+        expiryDate: '2026-11-15',
+        quantity: 280,
+        receivedDate: '2026-05-01',
+        supplier: '硕腾(上海)动物保健',
+      },
+    ],
   },
   {
     id: 'drug-010',
@@ -160,6 +298,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-06-01',
     status: 'normal',
     storageCondition: '2-8°C冷藏',
+    batches: [
+      {
+        id: 'batch-drug-010-001',
+        drugId: 'drug-010',
+        batchNo: 'MLX-2025-010',
+        productionDate: '2025-06-01',
+        expiryDate: '2027-06-01',
+        quantity: 120,
+        receivedDate: '2026-05-01',
+        supplier: '勃林格殷格翰动物保健',
+      },
+    ],
   },
   {
     id: 'drug-011',
@@ -176,6 +326,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-09-10',
     status: 'low_stock',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-011-001',
+        drugId: 'drug-011',
+        batchNo: 'TRM-2025-011',
+        productionDate: '2025-09-10',
+        expiryDate: '2027-09-10',
+        quantity: 25,
+        receivedDate: '2026-05-01',
+        supplier: '北京拜耳动物保健',
+      },
+    ],
   },
   {
     id: 'drug-012',
@@ -192,6 +354,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-07-20',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-012-001',
+        drugId: 'drug-012',
+        batchNo: 'MRP-2025-012',
+        productionDate: '2025-07-20',
+        expiryDate: '2027-07-20',
+        quantity: 90,
+        receivedDate: '2026-05-01',
+        supplier: '硕腾(上海)动物保健',
+      },
+    ],
   },
   {
     id: 'drug-013',
@@ -208,6 +382,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-03-15',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-013-001',
+        drugId: 'drug-013',
+        batchNo: 'OMP-2025-013',
+        productionDate: '2025-03-15',
+        expiryDate: '2027-03-15',
+        quantity: 200,
+        receivedDate: '2026-05-01',
+        supplier: '阿斯利康动物保健',
+      },
+    ],
   },
   {
     id: 'drug-014',
@@ -224,6 +410,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2026-04-20',
     status: 'expired',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-014-001',
+        drugId: 'drug-014',
+        batchNo: 'DSM-2024-014',
+        productionDate: '2024-04-20',
+        expiryDate: '2026-04-20',
+        quantity: 180,
+        receivedDate: '2026-05-01',
+        supplier: '天津金耀动物药业',
+      },
+    ],
   },
   {
     id: 'drug-015',
@@ -240,6 +438,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-10-05',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-015-001',
+        drugId: 'drug-015',
+        batchNo: 'LRT-2025-015',
+        productionDate: '2025-10-05',
+        expiryDate: '2027-10-05',
+        quantity: 160,
+        receivedDate: '2026-05-01',
+        supplier: '上海先灵葆雅动物保健',
+      },
+    ],
   },
   {
     id: 'drug-016',
@@ -256,6 +466,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-01-20',
     status: 'normal',
     storageCondition: '2-8°C冷藏',
+    batches: [
+      {
+        id: 'batch-drug-016-001',
+        drugId: 'drug-016',
+        batchNo: 'CFT-2025-016',
+        productionDate: '2025-01-20',
+        expiryDate: '2027-01-20',
+        quantity: 75,
+        receivedDate: '2026-05-01',
+        supplier: '罗氏动物保健',
+      },
+    ],
   },
   {
     id: 'drug-017',
@@ -272,6 +494,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2026-05-15',
     status: 'near_expiry',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-017-001',
+        drugId: 'drug-017',
+        batchNo: 'GNT-2024-017',
+        productionDate: '2024-08-15',
+        expiryDate: '2026-05-15',
+        quantity: 100,
+        receivedDate: '2026-05-01',
+        supplier: '华北制药动物保健',
+      },
+    ],
   },
   {
     id: 'drug-018',
@@ -288,6 +522,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-06-30',
     status: 'normal',
     storageCondition: '常温避光',
+    batches: [
+      {
+        id: 'batch-drug-018-001',
+        drugId: 'drug-018',
+        batchNo: 'MCP-2025-018',
+        productionDate: '2025-06-30',
+        expiryDate: '2027-06-30',
+        quantity: 220,
+        receivedDate: '2026-05-01',
+        supplier: '齐鲁动物保健品',
+      },
+    ],
   },
   {
     id: 'drug-019',
@@ -304,6 +550,18 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2025-12-01',
     status: 'expired',
     storageCondition: '常温避光密封',
+    batches: [
+      {
+        id: 'batch-drug-019-001',
+        drugId: 'drug-019',
+        batchNo: 'DZP-2024-019',
+        productionDate: '2024-12-01',
+        expiryDate: '2025-12-01',
+        quantity: 40,
+        receivedDate: '2026-05-01',
+        supplier: '恩华动物药业有限公司',
+      },
+    ],
   },
   {
     id: 'drug-020',
@@ -320,5 +578,17 @@ export const mockDrugs: Drug[] = [
     expiryDate: '2027-04-10',
     status: 'normal',
     storageCondition: '4-25°C避光',
+    batches: [
+      {
+        id: 'batch-drug-020-001',
+        drugId: 'drug-020',
+        batchNo: 'FEM-2025-020',
+        productionDate: '2025-04-10',
+        expiryDate: '2027-04-10',
+        quantity: 35,
+        receivedDate: '2026-05-01',
+        supplier: '华瑞制药动物保健',
+      },
+    ],
   },
 ]

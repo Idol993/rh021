@@ -41,6 +41,17 @@ export interface Pet {
   createdAt: string
 }
 
+export interface DrugBatch {
+  id: string
+  drugId: string
+  batchNo: string
+  productionDate: string
+  expiryDate: string
+  quantity: number
+  receivedDate: string
+  supplier?: string
+}
+
 export interface Drug {
   id: string
   name: string
@@ -56,6 +67,7 @@ export interface Drug {
   expiryDate: string
   status: 'normal' | 'low_stock' | 'near_expiry' | 'expired' | 'locked'
   storageCondition: string
+  batches: DrugBatch[]
 }
 
 export interface PrescriptionItem {

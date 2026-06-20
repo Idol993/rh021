@@ -84,6 +84,7 @@ export default function Pharmacy() {
   const [verifyingId, setVerifyingId] = useState<string | null>(null)
   const [verifyResult, setVerifyResult] = useState<{ passed: boolean; warnings: string[]; errors: string[] } | null>(null)
   const [dispenseSubTab, setDispenseSubTab] = useState(0)
+  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set())
 
   const lowStockCount = drugs.filter((d) => d.status === 'low_stock').length
   const nearExpiryCount = drugs.filter((d) => d.status === 'near_expiry').length
@@ -95,6 +96,34 @@ export default function Pharmacy() {
     if (statusFilter && d.status !== statusFilter) return false
     return true
   })
+
+  const TODAY = new Date('2026-06-20')
+
+  const getBatchStatus = (expiryDate: string) => {
+    const expiry = new Date(expiryDate)
+    const daysLeft = Math.ceil((expiry.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24))
+    if (daysLeft <= 0) {
+      return { label: '已过期', bgClass: 'bg-red-100', textClass: 'text-red-700', barColor: 'bg-red-500' }
+    } else if (daysLeft <= 30) {
+      return { label: '近效期', bgClass: 'bg-amber-100', textClass: 'text-amber-700', barColor: 'bg-amber-500' }
+    } else {
+      return { label: '正常', bgClass: 'bg-green-100', textClass: 'text-green-700', barColor: 'bg-green-500' }
+    }
+  }
+
+  const toggleBatchExpand = (drugId: string) => {
+    const next = new Set(expandedBatches)
+    if (next.has(drugId)) {
+      next.delete(drugId)
+    } else {
+      next.add(drugId)
+    }
+    setExpandedBatches(next)
+  }
+
+  const isBatchExpanded = (drugId: string) => {
+    return !expandedBatches.has(drugId)
+  }
 
   const statusBadge = (status: string) => {
     switch (status) {
@@ -146,16 +175,12 @@ export default function Pharmacy() {
       return
     }
     if (!inboundQty || inboundQty.trim() === '') {
-      setInboundResult({ type: 'error', msg: '请输入入库数量' })
+      setInboundResult({ type: 'error', msg: '入库数量必须是正整数' })
       return
     }
     const qtyNum = Number(inboundQty)
-    if (!Number.isFinite(qtyNum)) {
-      setInboundResult({ type: 'error', msg: '入库数量格式错误' })
-      return
-    }
-    if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
-      setInboundResult({ type: 'error', msg: '入库数量必须是正整数，不能是小数、0或负数' })
+    if (!Number.isFinite(qtyNum) || !Number.isInteger(qtyNum) || qtyNum <= 0) {
+      setInboundResult({ type: 'error', msg: '入库数量必须是正整数' })
       return
     }
     if (!inboundExpDate || inboundExpDate.trim() === '') {
@@ -164,7 +189,7 @@ export default function Pharmacy() {
     }
     const today = new Date('2026-06-20')
     if (new Date(inboundExpDate) <= today) {
-      setInboundResult({ type: 'error', msg: '药品已过期（有效期需晚于今日 2026-06-20），不允许入库' })
+      setInboundResult({ type: 'error', msg: '有效期已过期，不允许入库' })
       return
     }
     const drug = drugs.find((d) => d.id === inboundDrug)
@@ -316,74 +341,125 @@ export default function Pharmacy() {
               </select>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="table-header">
-                    <th className="px-3 py-3">药品名称</th>
-                    <th className="px-3 py-3">分类</th>
-                    <th className="px-3 py-3">规格</th>
-                    <th className="px-3 py-3">单价</th>
-                    <th className="px-3 py-3">库存</th>
-                    <th className="px-3 py-3">最低库存</th>
-                    <th className="px-3 py-3">批号</th>
-                    <th className="px-3 py-3">有效期</th>
-                    <th className="px-3 py-3">储存条件</th>
-                    <th className="px-3 py-3">状态</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredDrugs.map((drug) => {
-                    const ratio = Math.min(drug.stock / drug.minStock, 2)
-                    const barColor =
-                      drug.stock < drug.minStock ? 'bg-red-500' : 'bg-teal-500'
-                    return (
-                      <tr key={drug.id} className="hover:bg-slate-50">
-                        <td className="px-3 py-3 font-medium text-slate-800">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {filteredDrugs.map((drug) => {
+                const ratio = Math.min(drug.stock / drug.minStock, 2)
+                const barColor =
+                  drug.stock < drug.minStock ? 'bg-red-500' : 'bg-teal-500'
+                const isExpanded = isBatchExpanded(drug.id)
+                const sortedBatches = [...drug.batches].sort((a, b) => 
+                  new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+                )
+                const totalStock = sortedBatches.reduce((sum, b) => sum + b.quantity, 0)
+
+                return (
+                  <div key={drug.id} className="card hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
                           {drug.name}
-                        </td>
-                        <td className="px-3 py-3 text-slate-600">
-                          {categoryMap[drug.category]}
-                        </td>
-                        <td className="px-3 py-3 text-slate-600">
-                          {drug.specification}
-                        </td>
-                        <td className="px-3 py-3 text-slate-600">
-                          ¥{drug.price.toFixed(1)}
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${barColor}`}
-                                style={{ width: `${(ratio / 2) * 100}%` }}
-                              />
-                            </div>
-                            <span
-                              className={
-                                drug.stock < drug.minStock
-                                  ? 'text-red-600 font-medium'
-                                  : 'text-slate-600'
-                              }
-                            >
-                              {drug.stock}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-slate-600">{drug.minStock}</td>
-                        <td className="px-3 py-3 text-slate-600 font-mono text-xs">
-                          {drug.batchNo}
-                        </td>
-                        <td className="px-3 py-3 text-slate-600">{drug.expiryDate}</td>
-                        <td className="px-3 py-3 text-slate-600">
-                          {drug.storageCondition}
-                        </td>
-                        <td className="px-3 py-3">{statusBadge(drug.status)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                          {statusBadge(drug.status)}
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {categoryMap[drug.category]} · {drug.specification} · {drug.unit}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-slate-800">¥{drug.price.toFixed(1)}</p>
+                        <p className="text-xs text-slate-500">每{drug.unit}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                      <div>
+                        <span className="text-slate-500">生产厂商：</span>
+                        <span className="text-slate-700">{drug.manufacturer}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">储存条件：</span>
+                        <span className="text-slate-700">{drug.storageCondition}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">当前库存：</span>
+                        <span className={`font-medium ${drug.stock < drug.minStock ? 'text-red-600' : 'text-slate-700'}`}>
+                          {drug.stock} {drug.unit}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">最低库存：</span>
+                        <span className="text-slate-700">{drug.minStock} {drug.unit}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${barColor}`}
+                          style={{ width: `${(ratio / 2) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-slate-500 whitespace-nowrap">
+                        {drug.stock < drug.minStock ? '库存不足' : '库存正常'}
+                      </span>
+                    </div>
+
+                    <div className="border-t border-slate-200 pt-3">
+                      <button
+                        onClick={() => toggleBatchExpand(drug.id)}
+                        className="w-full flex items-center justify-between text-sm font-medium text-slate-700 hover:text-primary-600 transition-colors"
+                      >
+                        <span>批次明细</span>
+                        <span className="text-xs text-slate-400">
+                          {isExpanded ? '收起 ▲' : '展开 ▼'}
+                        </span>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="mt-3 space-y-2">
+                          {sortedBatches.length === 0 ? (
+                            <p className="text-sm text-slate-400 text-center py-2">暂无批次信息</p>
+                          ) : (
+                            <>
+                              {sortedBatches.map((batch) => {
+                                const batchStatus = getBatchStatus(batch.expiryDate)
+                                const progress = totalStock > 0 ? (batch.quantity / totalStock) * 100 : 0
+                                return (
+                                  <div key={batch.id} className="text-sm">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono text-xs text-slate-600">{batch.batchNo}</span>
+                                        <span className="text-slate-500 text-xs">
+                                          {batch.productionDate} / {batch.expiryDate}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-slate-700 font-medium">{batch.quantity} {drug.unit}</span>
+                                        <span className={`status-badge ${batchStatus.bgClass} ${batchStatus.textClass}`}>
+                                          {batchStatus.label}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${batchStatus.barColor} transition-all`}
+                                        style={{ width: `${progress}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              <div className="flex justify-between items-center pt-2 border-t border-slate-100 text-sm">
+                                <span className="text-slate-500">总库存</span>
+                                <span className="font-semibold text-slate-800">{totalStock} {drug.unit}</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -646,7 +722,8 @@ export default function Pharmacy() {
                 </label>
                 <input
                   type="number"
-                  min={1}
+                  step="1"
+                  min="1"
                   value={inboundQty}
                   onChange={(e) => setInboundQty(e.target.value)}
                   className="input-field"

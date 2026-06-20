@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
   FileText,
@@ -13,13 +13,16 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  Unlink,
+  RotateCcw,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/useAppStore'
 
 export default function DiagnosisDetail() {
   const { id, recordId } = useParams()
   const navigate = useNavigate()
-  const { medicalRecords, pets, owners, doctors, getMedicalRecordsByPetId } = useAppStore()
+  const location = useLocation()
+  const { medicalRecords, pets, owners, doctors, getMedicalRecordsByPetId, checkPetOwnerConsistency, updateMedicalRecord, updateAppointment } = useAppStore()
 
   let record: typeof medicalRecords[number] | undefined
   if (recordId) {
@@ -48,9 +51,29 @@ export default function DiagnosisDetail() {
     )
   }
 
+  const hasWarning = new URLSearchParams(location.search).get('warning') === '1'
+  const consistencyResult = checkPetOwnerConsistency({
+    recordId: record.id,
+    appointmentId: record.appointmentId,
+  })
+  const showWarning = !consistencyResult.valid || hasWarning
+
   const pet = pets.find((p) => p.id === record.petId)
   const owner = owners.find((o) => o.id === record.ownerId)
   const doctor = doctors.find((d) => d.id === record.doctorId)
+
+  const handleReConsult = () => {
+    if (record?.appointmentId) {
+      navigate(`/diagnosis/consultation/${record.appointmentId}`)
+    }
+  }
+
+  const handleUnlink = () => {
+    if (record && record.appointmentId) {
+      updateMedicalRecord(record.id, { appointmentId: undefined })
+      updateAppointment(record.appointmentId, { medicalRecordId: undefined })
+    }
+  }
 
   const petAge = pet
     ? Math.floor(
@@ -76,6 +99,48 @@ export default function DiagnosisDetail() {
 
   return (
     <div className="page-container">
+      {showWarning && (
+        <div className="card mb-6 bg-red-50 border-red-200">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-800 mb-2">数据一致性异常</h3>
+              {consistencyResult.issues.length > 0 ? (
+                <ul className="space-y-1 mb-3">
+                  {consistencyResult.issues.map((issue, idx) => (
+                    <li key={idx} className="text-sm text-red-700 flex items-start gap-2">
+                      <span className="text-red-500">•</span>
+                      {issue}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-red-700 mb-3">该病历可能存在数据异常，请谨慎处理</p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleReConsult}
+                  className="btn-primary text-sm px-4 py-2 inline-flex items-center gap-1"
+                  disabled={!record?.appointmentId}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  重新接诊
+                </button>
+                {record?.appointmentId && (
+                  <button
+                    onClick={handleUnlink}
+                    className="btn-secondary text-sm px-4 py-2 inline-flex items-center gap-1"
+                  >
+                    <Unlink className="w-4 h-4" />
+                    解除关联
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={() => navigate(-1)}

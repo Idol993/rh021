@@ -15,6 +15,7 @@ import type {
   Pet,
   Owner,
   Drug,
+  DrugBatch,
   MedicalRecord,
   Appointment,
   Doctor,
@@ -29,6 +30,50 @@ import type {
   InboundRecord,
   DispenseRecord,
 } from '@/types'
+
+const TODAY = new Date('2026-06-20')
+
+function recalcDrugStatus(drug: Drug): Drug['status'] {
+  const totalStock = drug.batches.reduce((sum, b) => sum + b.quantity, 0)
+  const activeBatches = drug.batches.filter(b => b.quantity > 0)
+  if (totalStock === 0) return 'locked'
+  const allExpired = activeBatches.every(b => new Date(b.expiryDate) <= TODAY)
+  if (allExpired) return 'expired'
+  const earliestExpiry = activeBatches
+    .map(b => new Date(b.expiryDate).getTime())
+    .reduce((min, t) => Math.min(min, t), Infinity)
+  const daysLeft = Math.ceil((earliestExpiry - TODAY.getTime()) / (1000 * 60 * 60 * 24))
+  if (daysLeft <= 30) return 'near_expiry'
+  if (totalStock < drug.minStock) return 'low_stock'
+  return 'normal'
+}
+
+function selectBatchesForDispense(
+  drug: Drug,
+  qty: number
+): { batches: { batchId: string; quantity: number }[]; totalAvailable: number } {
+  const validBatches = drug.batches
+    .filter(b => b.quantity > 0 && new Date(b.expiryDate) > TODAY)
+    .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime())
+
+  const totalAvailable = validBatches.reduce((sum, b) => sum + b.quantity, 0)
+
+  if (totalAvailable < qty) {
+    return { batches: [], totalAvailable }
+  }
+
+  const result: { batchId: string; quantity: number }[] = []
+  let remaining = qty
+
+  for (const batch of validBatches) {
+    if (remaining <= 0) break
+    const take = Math.min(batch.quantity, remaining)
+    result.push({ batchId: batch.id, quantity: take })
+    remaining -= take
+  }
+
+  return { batches: result, totalAvailable }
+}
 
 interface AppState {
   pets: Pet[]
@@ -62,6 +107,7 @@ interface AppState {
   inboundDrug: (id: string, quantity: number, batchNo: string, expiryDate: string, supplier: string) => { success: boolean; reason?: string; data?: { stock: number; batchNo: string } }
   dispensePrescription: (recordId: string) => { success: boolean; reason?: string }
   checkPrescription: (recordId: string) => { passed: boolean; warnings: string[]; errors: string[] }
+  checkSingleDrug: (drugId: string, qty: number, allergies?: string[]) => { passed: boolean; warnings: string[]; errors: string[] }
   updateBed: (id: string, data: Partial<Bed>) => void
   acknowledgeAlert: (inpId: string, alertIdx: number, handler: string) => void
   updateMember: (id: string, data: Partial<Member>) => void
@@ -81,6 +127,18 @@ interface AppState {
   getMemberById: (id: string) => Member | undefined
   getDispenseRecordsByPetId: (id: string) => DispenseRecord[]
   checkChipNo: (chipNo: string, excludeId?: string) => boolean
+  checkPetOwnerConsistency: (params: {
+    appointmentId?: string
+    recordId?: string
+    petId?: string
+  }) => {
+    valid: boolean
+    appointment?: Appointment
+    record?: MedicalRecord
+    pet?: Pet
+    owner?: Owner
+    issues: string[]
+  }
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -181,22 +239,53 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!drug) return { success: false, reason: '药品不存在' }
     if (!expiryDate || !expiryDate.trim()) return { success: false, reason: '请填写有效期' }
     if (!Number.isInteger(quantity) || quantity <= 0) return { success: false, reason: '入库数量必须为正整数' }
-    const today = new Date('2026-06-20')
-    if (new Date(expiryDate) <= today) return { success: false, reason: '药品已过期，不允许入库' }
-    const newStock = drug.stock + quantity
-    let newStatus: Drug['status'] = drug.status
-    if (newStatus === 'expired') newStatus = 'expired'
-    else if (newStock < drug.minStock) newStatus = 'low_stock'
-    else if (drug.status === 'expired') newStatus = 'expired'
-    else {
-      const daysLeft = Math.ceil((new Date(expiryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-      if (daysLeft <= 30) newStatus = 'near_expiry'
-      else newStatus = 'normal'
+    if (new Date(expiryDate) <= TODAY) return { success: false, reason: '药品已过期，不允许入库' }
+
+    const existingBatch = drug.batches.find((b) => b.batchNo === batchNo)
+    let newBatches: DrugBatch[]
+
+    if (existingBatch) {
+      newBatches = drug.batches.map((b) =>
+        b.batchNo === batchNo
+          ? { ...b, quantity: b.quantity + quantity }
+          : b
+      )
+    } else {
+      const newBatch: DrugBatch = {
+        id: `batch-${id}-${String(drug.batches.length + 1).padStart(3, '0')}`,
+        drugId: id,
+        batchNo,
+        productionDate: new Date().toISOString().slice(0, 10),
+        expiryDate,
+        quantity,
+        receivedDate: new Date().toISOString().slice(0, 10),
+        supplier,
+      }
+      newBatches = [...drug.batches, newBatch]
     }
+
+    const newStock = newBatches.reduce((sum, b) => sum + b.quantity, 0)
+    const activeBatches = newBatches.filter((b) => b.quantity > 0)
+    const earliestExpiryBatch = activeBatches.reduce((earliest, b) =>
+      new Date(b.expiryDate) < new Date(earliest.expiryDate) ? b : earliest
+    )
+    const newBatchNo = earliestExpiryBatch.batchNo
+    const newExpiryDate = earliestExpiryBatch.expiryDate
+
+    const tempDrug = { ...drug, batches: newBatches }
+    const newStatus = recalcDrugStatus(tempDrug)
+
     set((s) => ({
       drugs: s.drugs.map((d) =>
         d.id === id
-          ? { ...d, stock: newStock, status: newStatus, expiryDate, batchNo }
+          ? {
+              ...d,
+              batches: newBatches,
+              stock: newStock,
+              status: newStatus,
+              batchNo: newBatchNo,
+              expiryDate: newExpiryDate,
+            }
           : d
       ),
       inboundRecords: [
@@ -227,7 +316,49 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...s.operationLogs,
       ],
     }))
-    return { success: true, data: { stock: newStock, batchNo } }
+    return { success: true, data: { stock: newStock, batchNo: newBatchNo } }
+  },
+
+  checkSingleDrug: (drugId, qty, allergies) => {
+    const state = get()
+    const drug = state.drugs.find((d) => d.id === drugId)
+    if (!drug) return { passed: false, warnings: [], errors: ['药品不存在'] }
+    const warnings: string[] = []
+    const errors: string[] = []
+
+    const validBatches = drug.batches.filter(
+      (b) => b.quantity > 0 && new Date(b.expiryDate) > TODAY
+    )
+    const totalAvailable = validBatches.reduce((sum, b) => sum + b.quantity, 0)
+
+    if (totalAvailable < qty) {
+      errors.push(`药品 ${drug.name} 库存不足（可用${totalAvailable}，需${qty}）`)
+    }
+
+    const allExpired = drug.batches.filter((b) => b.quantity > 0).length > 0 && validBatches.length === 0
+    if (allExpired) {
+      errors.push(`药品 ${drug.name} 已过期`)
+    }
+
+    if (validBatches.length > 0) {
+      const earliestExpiry = validBatches
+        .map((b) => new Date(b.expiryDate).getTime())
+        .reduce((min, t) => Math.min(min, t), Infinity)
+      const daysLeft = Math.ceil((earliestExpiry - TODAY.getTime()) / (1000 * 60 * 60 * 24))
+      if (daysLeft <= 30) {
+        warnings.push(`药品 ${drug.name} 即将过期（${new Date(earliestExpiry).toISOString().slice(0, 10)}）`)
+      }
+    }
+
+    if (allergies?.length) {
+      for (const allergy of allergies) {
+        if (drug.name.includes(allergy) || allergy.includes(drug.name)) {
+          errors.push(`药品 ${drug.name} 与宠物过敏史冲突（${allergy}）`)
+        }
+      }
+    }
+
+    return { passed: errors.length === 0, warnings, errors }
   },
 
   checkPrescription: (recordId) => {
@@ -237,29 +368,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const pet = state.pets.find((p) => p.id === record.petId)
     const warnings: string[] = []
     const errors: string[] = []
-    const today = new Date('2026-06-20')
 
     for (const p of record.prescriptions) {
-      const drug = state.drugs.find((d) => d.id === p.drugId)
-      if (!drug) {
-        errors.push(`药品 ${p.drugName} 不存在`)
-        continue
-      }
-      if (drug.stock < p.quantity) {
-        errors.push(`药品 ${p.drugName} 库存不足（当前${drug.stock}，需${p.quantity}）`)
-      }
-      if (drug.status === 'expired' || new Date(drug.expiryDate) <= today) {
-        errors.push(`药品 ${p.drugName} 已过期`)
-      } else if (drug.status === 'near_expiry') {
-        warnings.push(`药品 ${p.drugName} 即将过期（${drug.expiryDate}）`)
-      }
-      if (pet?.allergies?.length) {
-        for (const allergy of pet.allergies) {
-          if (p.drugName.includes(allergy) || allergy.includes(p.drugName)) {
-            errors.push(`药品 ${p.drugName} 与宠物过敏史冲突（${allergy}）`)
-          }
-        }
-      }
+      const result = state.checkSingleDrug(p.drugId, p.quantity, pet?.allergies)
+      errors.push(...result.errors)
+      warnings.push(...result.warnings)
     }
     return { passed: errors.length === 0, warnings, errors }
   },
@@ -277,25 +390,78 @@ export const useAppStore = create<AppState>((set, get) => ({
     const pet = state.pets.find((p) => p.id === record.petId)
     const owner = state.owners.find((o) => o.id === record.ownerId)
 
-    const dispenseItems = record.prescriptions.map((p) => {
+    const dispensePlans: Array<{
+      prescription: (typeof record.prescriptions)[0]
+      drug: Drug
+      plan: { batches: { batchId: string; quantity: number }[]; totalAvailable: number }
+    }> = []
+
+    for (const p of record.prescriptions) {
       const drug = state.drugs.find((d) => d.id === p.drugId)!
+      const plan = selectBatchesForDispense(drug, p.quantity)
+      if (plan.batches.length === 0) {
+        return { success: false, reason: `药品 ${p.drugName} 库存不足` }
+      }
+      dispensePlans.push({ prescription: p, drug, plan })
+    }
+
+    const dispenseItems = dispensePlans.map(({ prescription, drug, plan }) => {
+      const usedBatches = plan.batches
+        .map((b) => {
+          const batch = drug.batches.find((db) => db.id === b.batchId)
+          return batch?.batchNo ?? ''
+        })
+        .filter(Boolean)
+      const batchNo =
+        usedBatches.length > 1
+          ? `${usedBatches[0]}...`
+          : usedBatches[0] ?? ''
       return {
-        drugId: p.drugId,
-        drugName: p.drugName,
-        quantity: p.quantity,
-        batchNo: drug.batchNo,
+        drugId: prescription.drugId,
+        drugName: prescription.drugName,
+        quantity: prescription.quantity,
+        batchNo,
         unit: drug.unit,
       }
     })
 
     set((s) => {
       const newDrugs = s.drugs.map((d) => {
-        const p = record.prescriptions.find((x) => x.drugId === d.id)
-        if (!p) return d
-        const newStock = d.stock - p.quantity
-        let newStatus = d.status
-        if (newStock < d.minStock) newStatus = 'low_stock'
-        return { ...d, stock: newStock, status: newStatus }
+        const dispensePlan = dispensePlans.find((dp) => dp.drug.id === d.id)
+        if (!dispensePlan) return d
+
+        let newBatches = [...d.batches]
+        for (const batchPlan of dispensePlan.plan.batches) {
+          newBatches = newBatches.map((b) =>
+            b.id === batchPlan.batchId
+              ? { ...b, quantity: b.quantity - batchPlan.quantity }
+              : b
+          )
+        }
+
+        const newStock = newBatches.reduce((sum, b) => sum + b.quantity, 0)
+        const activeBatches = newBatches.filter((b) => b.quantity > 0)
+        let newBatchNo = d.batchNo
+        let newExpiryDate = d.expiryDate
+        if (activeBatches.length > 0) {
+          const earliestExpiryBatch = activeBatches.reduce((earliest, b) =>
+            new Date(b.expiryDate) < new Date(earliest.expiryDate) ? b : earliest
+          )
+          newBatchNo = earliestExpiryBatch.batchNo
+          newExpiryDate = earliestExpiryBatch.expiryDate
+        }
+
+        const tempDrug = { ...d, batches: newBatches }
+        const newStatus = recalcDrugStatus(tempDrug)
+
+        return {
+          ...d,
+          batches: newBatches,
+          stock: newStock,
+          status: newStatus,
+          batchNo: newBatchNo,
+          expiryDate: newExpiryDate,
+        }
       })
 
       return {
@@ -475,5 +641,71 @@ export const useAppStore = create<AppState>((set, get) => ({
     return !get().pets.some(
       (p) => p.chipNo && p.chipNo.toLowerCase() === chipNo.toLowerCase() && p.id !== excludeId
     )
+  },
+
+  checkPetOwnerConsistency: (params) => {
+    const state = get()
+    const { appointmentId, recordId, petId } = params
+    const issues: string[] = []
+
+    let appointment: Appointment | undefined
+    let record: MedicalRecord | undefined
+    let pet: Pet | undefined
+    let owner: Owner | undefined
+
+    if (appointmentId) {
+      appointment = state.appointments.find((a) => a.id === appointmentId)
+    }
+
+    if (recordId) {
+      record = state.medicalRecords.find((r) => r.id === recordId)
+    } else if (appointment) {
+      if (appointment.medicalRecordId) {
+        record = state.medicalRecords.find((r) => r.id === appointment!.medicalRecordId)
+      }
+      if (!record) {
+        record = state.medicalRecords.find((r) => r.appointmentId === appointmentId)
+      }
+    }
+
+    if (petId) {
+      pet = state.pets.find((p) => p.id === petId)
+    }
+
+    if (appointment && record) {
+      if (record.petId !== appointment.petId) {
+        issues.push('关联病历的宠物与预约宠物不一致')
+      }
+      if (record.ownerId !== appointment.ownerId) {
+        issues.push('关联病历的主人与预约主人不一致')
+      }
+    }
+
+    if (petId && appointment) {
+      if (appointment.petId !== petId) {
+        issues.push(`预约宠物与当前宠物不一致`)
+      }
+    }
+
+    if (record) {
+      owner = state.owners.find((o) => o.id === record.ownerId)
+      if (!pet) {
+        pet = state.pets.find((p) => p.id === record.petId)
+      }
+    } else if (appointment) {
+      owner = state.owners.find((o) => o.id === appointment.ownerId)
+      if (!pet) {
+        pet = state.pets.find((p) => p.id === appointment.petId)
+      }
+    }
+
+    return {
+      valid: issues.length === 0,
+      appointment,
+      record,
+      pet,
+      owner,
+      issues,
+    }
   },
 }))

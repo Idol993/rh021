@@ -10,12 +10,16 @@ import {
   ShieldAlert,
   Bell,
   Activity,
+  X,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/useAppStore'
 
 function StartDiagnosisButton({ apptId }: { apptId: string }) {
   const navigate = useNavigate()
-  const { getAppointmentById, getMedicalRecordByAppointmentId, appointments } = useAppStore()
+  const { getAppointmentById, getMedicalRecordByAppointmentId, appointments, checkPetOwnerConsistency } = useAppStore()
+  const [showModal, setShowModal] = useState(false)
+  const [consistencyResult, setConsistencyResult] = useState<ReturnType<typeof checkPetOwnerConsistency> | null>(null)
+
   const appt = getAppointmentById(apptId)
   const existingRecord = getMedicalRecordByAppointmentId(apptId)
   const apptWithMedicalRecordId = appointments.find(a => a.id === apptId)?.medicalRecordId
@@ -26,35 +30,212 @@ function StartDiagnosisButton({ apptId }: { apptId: string }) {
 
   if (!appt) return null
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const result = checkPetOwnerConsistency({ appointmentId: apptId })
+    if (result.valid) {
+      if (finalRecord) {
+        navigate(`/diagnosis/medical/${finalRecord.id}`)
+      } else {
+        navigate(`/diagnosis/consultation/${apptId}`)
+      }
+    } else {
+      setConsistencyResult(result)
+      setShowModal(true)
+    }
+  }
+
+  const handleViewRecordWithWarning = () => {
+    if (finalRecord) {
+      navigate(`/diagnosis/medical/${finalRecord.id}?warning=1`)
+    }
+    setShowModal(false)
+  }
+
+  const handleReConsult = () => {
+    navigate(`/diagnosis/consultation/${apptId}`)
+    setShowModal(false)
+  }
+
   if (finalRecord) {
     return (
-      <Link
-        to={`/diagnosis/medical/${finalRecord.id}`}
-        className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
-      >
-        查看病历
-      </Link>
+      <>
+        <button
+          onClick={handleClick}
+          className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
+        >
+          查看病历
+        </button>
+
+        {showModal && consistencyResult && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="card max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-red-500" />
+                  数据一致性异常
+                </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-1 rounded hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <div className="mb-4">
+                <ul className="space-y-2 mb-4">
+                  {consistencyResult.issues.map((issue, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm text-red-600">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      {issue}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-sm text-slate-600">
+                  该预约关联的病历与预约信息不一致，请选择处理方式
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="btn-secondary text-sm px-4 py-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleReConsult}
+                  className="btn-primary text-sm px-4 py-2"
+                >
+                  重新接诊（新建病历）
+                </button>
+                <button
+                  onClick={handleViewRecordWithWarning}
+                  className="btn-secondary text-sm px-4 py-2"
+                >
+                  查看异常病历
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     )
   }
 
   if (appt.status === 'scheduled' || appt.status === 'in_progress') {
     return (
-      <button
-        onClick={() => navigate(`/diagnosis/consultation/${apptId}`)}
-        className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
-      >
-        {appt.status === 'scheduled' ? '开始诊疗' : '继续诊疗'}
-      </button>
+      <>
+        <button
+          onClick={handleClick}
+          className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1"
+        >
+          {appt.status === 'scheduled' ? '开始诊疗' : '继续诊疗'}
+        </button>
+
+        {showModal && consistencyResult && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="card max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-red-500" />
+                  数据一致性异常
+                </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-1 rounded hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <div className="mb-4">
+                <ul className="space-y-2 mb-4">
+                  {consistencyResult.issues.map((issue, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm text-red-600">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      {issue}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-sm text-slate-600">
+                  该预约关联的病历与预约信息不一致，请选择处理方式
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="btn-secondary text-sm px-4 py-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleReConsult}
+                  className="btn-primary text-sm px-4 py-2"
+                >
+                  重新接诊（新建病历）
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     )
   }
 
   return (
-    <button
-      onClick={() => navigate(`/diagnosis/consultation/${apptId}`)}
-      className="btn-secondary text-xs px-3 py-1.5 inline-block"
-    >
-      再次接诊
-    </button>
+    <>
+      <button
+        onClick={handleClick}
+        className="btn-secondary text-xs px-3 py-1.5 inline-block"
+      >
+        再次接诊
+      </button>
+
+      {showModal && consistencyResult && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="card max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                数据一致性异常
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1 rounded hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <ul className="space-y-2 mb-4">
+                {consistencyResult.issues.map((issue, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-sm text-red-600">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    {issue}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-sm text-slate-600">
+                该预约关联的病历与预约信息不一致，请选择处理方式
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowModal(false)}
+                className="btn-secondary text-sm px-4 py-2"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleReConsult}
+                className="btn-primary text-sm px-4 py-2"
+              >
+                重新接诊（新建病历）
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

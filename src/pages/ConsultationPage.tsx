@@ -46,6 +46,7 @@ export default function ConsultationPage() {
     updateAppointment,
     currentUser,
     addOperationLog,
+    checkSingleDrug,
   } = useAppStore()
 
   const appt = appointmentId ? getAppointmentById(appointmentId) : undefined
@@ -92,6 +93,7 @@ export default function ConsultationPage() {
 
   const [examResults, setExamResults] = useState<ExamResult[]>([])
   const [prescriptions, setPrescriptions] = useState<PrescriptionItem[]>([])
+  const [prescriptionChecks, setPrescriptionChecks] = useState<Record<number, { passed: boolean; warnings: string[]; errors: string[] }>>({})
   const [addDrugId, setAddDrugId] = useState('')
   const [addDosage, setAddDosage] = useState('')
   const [addFrequency, setAddFrequency] = useState('')
@@ -159,29 +161,21 @@ export default function ConsultationPage() {
     const qty = parseInt(addQuantity)
     if (isNaN(qty) || qty <= 0) return
 
-    if (drug.stock < qty) {
-      setToast({ type: 'error', message: `库存不足，当前${drug.stock}，需${qty}` })
-      setSaveError(`库存不足：${drug.name} 当前${drug.stock}，需${qty}`)
+    const checkResult = checkSingleDrug(addDrugId, qty, pet?.allergies)
+
+    if (checkResult.errors.length > 0) {
+      setToast({ type: 'error', message: checkResult.errors[0] })
+      setSaveError(checkResult.errors[0])
       setTimeout(() => setToast(null), 3000)
       return
     }
-    if (drug.status === 'expired') {
-      setToast({ type: 'error', message: '药品已过期' })
-      setSaveError(`药品已过期：${drug.name}`)
-      setTimeout(() => setToast(null), 3000)
-      return
-    }
-    if (checkPrescriptionAllergy(drug.name)) {
-      setToast({ type: 'error', message: '该药品与宠物过敏史冲突' })
-      setSaveError(`过敏风险：${drug.name} 与宠物过敏史冲突`)
-      setTimeout(() => setToast(null), 3000)
-      return
-    }
-    if (drug.status === 'near_expiry') {
-      setPrescriptionWarning(`⚠️ 药品 ${drug.name} 即将过期（${drug.expiryDate}），已添加到处方，请确认`)
+
+    if (checkResult.warnings.length > 0) {
+      setPrescriptionWarning(`⚠️ ${checkResult.warnings[0]}，已添加到处方，请确认`)
       setTimeout(() => setPrescriptionWarning(null), 4000)
     }
 
+    const newIdx = prescriptions.length
     setPrescriptions([
       ...prescriptions,
       {
@@ -193,6 +187,10 @@ export default function ConsultationPage() {
         quantity: qty,
       },
     ])
+    setPrescriptionChecks({
+      ...prescriptionChecks,
+      [newIdx]: checkResult,
+    })
     setToast({ type: 'success', message: '已添加' })
     setTimeout(() => setToast(null), 2000)
     setSaveError(null)
@@ -205,6 +203,17 @@ export default function ConsultationPage() {
 
   const removePrescription = (idx: number) => {
     setPrescriptions(prescriptions.filter((_, i) => i !== idx))
+    const newChecks: Record<number, { passed: boolean; warnings: string[]; errors: string[] }> = {}
+    Object.entries(prescriptionChecks).forEach(([key, value]) => {
+      const oldIdx = parseInt(key)
+      const checkValue = value as { passed: boolean; warnings: string[]; errors: string[] }
+      if (oldIdx < idx) {
+        newChecks[oldIdx] = checkValue
+      } else if (oldIdx > idx) {
+        newChecks[oldIdx - 1] = checkValue
+      }
+    })
+    setPrescriptionChecks(newChecks)
   }
 
   const allergies = pet.allergies || []
@@ -630,17 +639,37 @@ export default function ConsultationPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {prescriptions.map((p, idx) => {
-                        const allergyRisk = checkPrescriptionAllergy(p.drugName)
+                        const check = prescriptionChecks[idx]
+                        const hasErrors = check?.errors && check.errors.length > 0
+                        const hasWarnings = check?.warnings && check.warnings.length > 0
+                        let rowClass = 'bg-white'
+                        if (hasErrors) {
+                          rowClass = 'bg-red-50'
+                        } else if (hasWarnings) {
+                          rowClass = 'bg-amber-50'
+                        }
                         return (
-                          <tr key={idx} className={allergyRisk ? 'bg-red-50 text-red-700' : 'bg-white'}>
+                          <tr key={idx} className={rowClass}>
                             <td className="px-3 py-2 text-sm font-medium">{p.drugName}</td>
                             <td className="px-3 py-2 text-sm">{p.dosage}</td>
                             <td className="px-3 py-2 text-sm">{p.frequency}</td>
                             <td className="px-3 py-2 text-sm">{p.duration}</td>
                             <td className="px-3 py-2 text-sm">{p.quantity}</td>
                             <td className="px-3 py-2">
-                              {allergyRisk ? (
-                                <span className="status-badge bg-red-100 text-red-700">⚠️ 过敏风险</span>
+                              {hasErrors ? (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  <XCircle className="w-4 h-4 text-red-600" />
+                                  {check.errors.map((err, i) => (
+                                    <span key={i} className="status-badge bg-red-100 text-red-700">{err}</span>
+                                  ))}
+                                </div>
+                              ) : hasWarnings ? (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                  {check.warnings.map((warn, i) => (
+                                    <span key={i} className="status-badge bg-amber-100 text-amber-700">{warn}</span>
+                                  ))}
+                                </div>
                               ) : (
                                 <span className="status-badge bg-green-100 text-green-700">安全</span>
                               )}

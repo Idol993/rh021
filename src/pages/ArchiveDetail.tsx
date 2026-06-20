@@ -8,7 +8,7 @@ import { differenceInYears, format } from 'date-fns'
 export default function ArchiveDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { getPetById, getOwnerById, getDoctorById, getMedicalRecordsByPetId, getDispenseRecordsByPetId } = useAppStore()
+  const { getPetById, getOwnerById, getDoctorById, getMedicalRecordsByPetId, getDispenseRecordsByPetId, medicalRecords: allMedicalRecords } = useAppStore()
 
   const pet = id ? getPetById(id) : undefined
   if (!pet) {
@@ -25,9 +25,18 @@ export default function ArchiveDetail() {
   }
 
   const owner = getOwnerById(pet.ownerId)
-  const medicalRecords = getMedicalRecordsByPetId(pet.id)
-  const sortedRecords = [...medicalRecords].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  
+  const filteredMedicalRecords = allMedicalRecords.filter(r => r.petId === pet.id)
+  const mismatchedRecords = allMedicalRecords.filter(r => r.petId !== pet.id && r.ownerId === pet.ownerId)
+  
+  if (mismatchedRecords.length > 0) {
+    console.warn(`[ArchiveDetail] 发现 ${mismatchedRecords.length} 条不属于当前宠物 ${pet.id} (${pet.name}) 的病历记录，已过滤：`, mismatchedRecords.map(r => ({ id: r.id, petId: r.petId, petName: r.petId })))
+  }
+  
+  const sortedRecords = [...filteredMedicalRecords].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const latestRecord = sortedRecords[0]
+
+  const dispenses = getDispenseRecordsByPetId(pet.id)
 
   const timelineEvents = useMemo(() => {
     const events: { date: string; type: 'vaccine' | 'deworming' | 'visit' | 'dispense'; title: string; desc: string; icon: React.ReactNode; color: string; recordId?: string }[] = []
@@ -46,7 +55,7 @@ export default function ArchiveDetail() {
       color: 'bg-amber-500'
     }))
     
-    medicalRecords.forEach(r => events.push({
+    filteredMedicalRecords.forEach(r => events.push({
       date: r.date, type: 'visit', title: `就诊：${r.diagnosis}`,
       desc: `主诉：${r.chiefComplaint}`,
       icon: <Stethoscope className="w-3.5 h-3.5" />,
@@ -54,7 +63,6 @@ export default function ArchiveDetail() {
       recordId: r.id
     }))
     
-    const dispenses = getDispenseRecordsByPetId(pet.id)
     dispenses.forEach(d => events.push({
       date: d.timestamp.split(' ')[0], type: 'dispense',
       title: `发药：${d.items.map(i => i.drugName).join('、')}`,
@@ -64,7 +72,7 @@ export default function ArchiveDetail() {
     }))
     
     return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [pet, medicalRecords, getDispenseRecordsByPetId])
+  }, [pet, filteredMedicalRecords, dispenses])
 
   const calcAge = (birthDate: string) => {
     const years = differenceInYears(new Date(), new Date(birthDate))
@@ -101,7 +109,7 @@ export default function ArchiveDetail() {
     { name: '已过期', value: expiredCount, color: '#ef4444' },
   ].filter(d => d.value > 0)
 
-  const totalPrescriptions = medicalRecords.reduce((sum, r) => sum + r.prescriptions.length, 0)
+  const totalPrescriptions = filteredMedicalRecords.reduce((sum, r) => sum + r.prescriptions.length, 0)
 
   return (
     <div className="page-container">
@@ -213,7 +221,7 @@ export default function ArchiveDetail() {
           <div className="space-y-4">
             <div className="bg-blue-50 rounded-lg p-4">
               <p className="text-sm text-blue-600">就诊次数</p>
-              <p className="text-3xl font-bold text-blue-700 mt-1">{medicalRecords.length}</p>
+              <p className="text-3xl font-bold text-blue-700 mt-1">{filteredMedicalRecords.length}</p>
             </div>
             <div className="bg-amber-50 rounded-lg p-4">
               <p className="text-sm text-amber-600">处方数量</p>
